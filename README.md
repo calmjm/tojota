@@ -10,7 +10,7 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
 
 # Usage
 
-- Configure your MyT user account, password and vehicle VIN into configs/myt.json
+- Configure your MyT user account, password and vehicle VIN into `configs/myt.json`
 - Run `python tojota.py` to fetch, save and print data
 - Data is saved to cache directory for further usage
 
@@ -18,7 +18,7 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
 
 ## trips.json
 
-`
+```
 {
   "recentTrips": [
     {
@@ -108,11 +108,11 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
   }
 }
 
-`
+```
 
 ## trip.json
 
-`
+```
 {
   "tripEvents": [
     {
@@ -544,11 +544,11 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
     "maxSpeedInMph": 52.83
   }
 }
-`
+```
 
 ## parking.json
 
-`
+```
 {
   "event": {
     "lat": "64.7704251",
@@ -558,4 +558,4 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
   },
   "tripStatus": "0"
 }
-`
+```
