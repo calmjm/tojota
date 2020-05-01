@@ -1,0 +1,5 @@
+[BASIC]
+good-names=_,e,i,l,ls,r,f
+
+[FORMAT]
+max-line-length=130
