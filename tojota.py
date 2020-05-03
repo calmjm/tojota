@@ -221,14 +221,14 @@ def main():
     # Check is vehicle is still parked or moving and print corresponding information. Parking timestamp is epoch
     # timestamp with microseconds. Actual value seems to be at second precision level.
     parking = myt.get_parking()
-    if parking['tripStatus']:
+    if parking['tripStatus'] == '0':
         print('Car is parked at {} at {}'.format(parking['event']['address'],
                                                  pendulum.from_timestamp(int(parking['event']['timestamp']) / 1000).
                                                  in_tz(myt.config_data['timezone']).to_datetime_string()))
     else:
-        print('Car left from {} at {}'.format(parking['event']['address'],
-                                              pendulum.from_timestamp(int(parking['event']['timestamp']) / 1000).
-                                              in_tz(myt.config_data['timezone']).to_datetime_string()))
+        print('Car left from {} parked at {}'.format(parking['event']['address'],
+                                                     pendulum.from_timestamp(int(parking['event']['timestamp']) / 1000).
+                                                     in_tz(myt.config_data['timezone']).to_datetime_string()))
 
     # Get detailed information about trips and calculate cumulative kilometers and fuel liters
     kms = 0
