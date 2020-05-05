@@ -127,6 +127,8 @@ class Myt:
                          'Sec-Fetch-Dest': 'empty'}
         log.info('Logging in...')
         r = requests.post('https://ssoms.toyota-europe.com/authenticate', headers=login_headers, json=self.config_data)
+        if r.status_code != 200:
+            raise ValueError('Login failed, check your credentials! {}'.format(r.text))
         user_data = r.json()
         self.user_data = user_data
         self.headers = {'X-TME-TOKEN': user_data['token']}
