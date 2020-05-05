@@ -6,6 +6,7 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
 # Installation
 
 - Create virtual environment
+- On Windows platform run `pip install pip==18.1` because of [pendulum bug](https://github.com/sdispater/pendulum/issues/454)
 - Install requirements `pip install -r requirements.txt`
 
 # Usage
