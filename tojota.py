@@ -204,6 +204,37 @@ class Myt:
             self._write_file(parking_file, r.text)
         return r.json()
 
+    def get_odometer_fuel(self):
+        """
+        Get mileage and fuel tank information. Data is saved when vehicle is powered off. Save data to
+        CACHE_DIR/odometer/odometer-`datetime` file.
+        :return: list(odometer, odometer_unit, fuel_percentage)
+        """
+        odometer_path = Path(CACHE_DIR) / 'odometer'
+        odometer_file = odometer_path / 'odometer-{}'.format(pendulum.now())
+        token = self.user_data['token']
+        vin = self.config_data['vin']
+        headers = {'Cookie': f'iPlanetDirectoryPro={token}'}
+        url = f'https://myt-agg.toyota-europe.com/cma/api/vehicle/{vin}/addtionalInfo'  # (sic)
+        r = requests.get(url, headers=headers)
+        if r.status_code != 200:
+            raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
+        os.makedirs(odometer_path, exist_ok=True)
+        previous_odometer = self._read_file(self._find_latest_file(str(odometer_path / 'odometer*')))
+        if r.text != previous_odometer:
+            self._write_file(odometer_file, r.text)
+        data = r.json()
+        odometer = 0
+        odometer_unit = ''
+        fuel = 0
+        for item in data:
+            if item['type'] == 'mileage':
+                odometer = item['value']
+                odometer_unit = item['unit']
+            if item['type'] == 'Fuel':
+                fuel = item['value']
+        return odometer, odometer_unit, fuel
+
 
 def main():
     """
@@ -232,6 +263,10 @@ def main():
         print('Car left from {} parked at {}'.format(parking['event']['address'],
                                                      pendulum.from_timestamp(int(parking['event']['timestamp']) / 1000).
                                                      in_tz(myt.config_data['timezone']).to_datetime_string()))
+
+    # Get odometer and fuel tank status
+    odometer, odometer_unit, fuel_percent = myt.get_odometer_fuel()
+    print('Odometer {} {}, {}% fuel left'.format(odometer, odometer_unit, fuel_percent))
 
     # Get detailed information about trips and calculate cumulative kilometers and fuel liters
     kms = 0
