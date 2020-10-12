@@ -560,3 +560,19 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
   "tripStatus": "0"
 }
 ```
+
+## mileage.json
+
+```
+[
+  {
+    "type": "mileage",
+    "value": 3205,
+    "unit": "km"
+  },
+  {
+    "type": "Fuel",
+    "value": 22
+  }
+]
+```
