@@ -197,7 +197,7 @@ class Myt:
         url = f'https://myt-agg.toyota-europe.com/cma/api/users/{uuid}/vehicle/location'
         r = requests.get(url, headers=headers)
         if r.status_code != 200:
-            raise ValueError('Failed to get data {} {}'.format(r.status_code, r.headers))
+            raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
         os.makedirs(parking_path, exist_ok=True)
         previous_parking = self._read_file(self._find_latest_file(str(parking_path / 'parking*')))
         if r.text != previous_parking:
@@ -222,6 +222,7 @@ def main():
 
     # Check is vehicle is still parked or moving and print corresponding information. Parking timestamp is epoch
     # timestamp with microseconds. Actual value seems to be at second precision level.
+    log.info('Get parking info...')
     parking = myt.get_parking()
     if parking['tripStatus'] == '0':
         print('Car is parked at {} at {}'.format(parking['event']['address'],
@@ -242,8 +243,14 @@ def main():
         start_time = pendulum.parse(trip['startTimeGmt']).in_tz(myt.config_data['timezone']).to_datetime_string()
         end_time = pendulum.parse(trip['endTimeGmt']).in_tz(myt.config_data['timezone']).to_datetime_string()
         # Remove country part from address strings
-        start = trip['startAddress'].split(',')
-        end = trip['endAddress'].split(',')
+        try:
+            start = trip['startAddress'].split(',')
+        except KeyError:
+            start = ['Unknown', ' Unknown']
+        try:
+            end = trip['endAddress'].split(',')
+        except KeyError:
+            end = ['Unknown', ' Unknown']
         start_address = '{},{}'.format(start[0], start[1])
         end_address = '{},{}'.format(end[0], end[1])
         kms += stats['totalDistanceInKm']
