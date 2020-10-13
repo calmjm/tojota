@@ -252,11 +252,19 @@ class Myt:
         r = requests.get(url, headers=headers)
         if r.status_code != 200:
             raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
+        data = r.json()
         os.makedirs(remote_control_path, exist_ok=True)
-        previous_remote_control = self._read_file(self._find_latest_file(str(remote_control_path / 'remote_control*')))
-        if r.text != previous_remote_control:
-            self._write_file(remote_control_file, r.text)
-        return r.json()
+
+        # remoteControl/status messages has varying order of the content, load it as dict for comparison
+        try:
+            previous_remote_control = json.loads(self._read_file(self._find_latest_file(str(
+                remote_control_path / 'remote_control*'))))
+        except TypeError:
+            previous_remote_control = None
+
+        if data != previous_remote_control:
+            self._write_file(remote_control_file, json.dumps(r.json(), sort_keys=True))
+        return data
 
 
 def main():
