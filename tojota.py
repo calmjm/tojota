@@ -255,7 +255,7 @@ class Myt:
         data = r.json()
         os.makedirs(remote_control_path, exist_ok=True)
 
-        # remoteControl/status messages has varying order of the content, load it as dict for comparison
+        # remoteControl/status messages has varying order of the content, load it as a dict for comparison
         try:
             previous_remote_control = json.loads(self._read_file(self._find_latest_file(str(
                 remote_control_path / 'remote_control*'))))
@@ -301,7 +301,13 @@ def main():
 
     # Get remote control status
     status = myt.get_remote_control_status()
-    print(status)
+    charge_info = status['VehicleInfo']['ChargeInfo']
+    hvac_info = status['VehicleInfo']['RemoteHvacInfo']
+    print('Battery level {} %, EV range {} km, Inside temperature {}, Charging status {}, status read at {}'.format(
+        charge_info['ChargeRemainingAmount'], charge_info['EvDistanceWithAirCoInKm'], hvac_info['InsideTemperature'],
+        charge_info['ChargingStatus'], pendulum.parse(status['VehicleInfo']['AcquisitionDatetime']).
+            in_tz(myt.config_data['timezone']).to_datetime_string()
+    ))
 
     # Get detailed information about trips and calculate cumulative kilometers and fuel liters
     kms = 0
