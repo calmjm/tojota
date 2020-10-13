@@ -235,6 +235,29 @@ class Myt:
                 fuel = item['value']
         return odometer, odometer_unit, fuel
 
+    def get_remote_control_status(self):
+        """
+        Get location information. Location is saved when vehicle is powered off. Save data to
+        CACHE_DIR/remote_control/remote_control-`datetime` file. Saved information is not currently used for anything. When vehicle
+        is powered on again tripStatus will change to '1'.
+        :return: Location dict
+        """
+        remote_control_path = Path(CACHE_DIR) / 'remote_control'
+        remote_control_file = remote_control_path / 'remote_control-{}'.format(pendulum.now())
+        token = self.user_data['token']
+        uuid = self.user_data['customerProfile']['uuid']
+        vin = self.config_data['vin']
+        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'uuid': uuid}
+        url = f'https://myt-agg.toyota-europe.com/cma/api/vehicles/{vin}/remoteControl/status'
+        r = requests.get(url, headers=headers)
+        if r.status_code != 200:
+            raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
+        os.makedirs(remote_control_path, exist_ok=True)
+        previous_remote_control = self._read_file(self._find_latest_file(str(remote_control_path / 'remote_control*')))
+        if r.text != previous_remote_control:
+            self._write_file(remote_control_file, r.text)
+        return r.json()
+
 
 def main():
     """
@@ -267,6 +290,10 @@ def main():
     # Get odometer and fuel tank status
     odometer, odometer_unit, fuel_percent = myt.get_odometer_fuel()
     print('Odometer {} {}, {}% fuel left'.format(odometer, odometer_unit, fuel_percent))
+
+    # Get remote control status
+    status = myt.get_remote_control_status()
+    print(status)
 
     # Get detailed information about trips and calculate cumulative kilometers and fuel liters
     kms = 0
