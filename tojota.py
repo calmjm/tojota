@@ -238,8 +238,7 @@ class Myt:
     def get_remote_control_status(self):
         """
         Get location information. Location is saved when vehicle is powered off. Save data to
-        CACHE_DIR/remote_control/remote_control-`datetime` file. Saved information is not currently used for anything. When vehicle
-        is powered on again tripStatus will change to '1'.
+        CACHE_DIR/remote_control/remote_control-`datetime` file.
         :return: Location dict
         """
         remote_control_path = Path(CACHE_DIR) / 'remote_control'
@@ -296,18 +295,25 @@ def main():
                                                      in_tz(myt.config_data['timezone']).to_datetime_string()))
 
     # Get odometer and fuel tank status
+    log.info('Get odometer info...')
     odometer, odometer_unit, fuel_percent = myt.get_odometer_fuel()
     print('Odometer {} {}, {}% fuel left'.format(odometer, odometer_unit, fuel_percent))
 
     # Get remote control status
+    log.info('Get remote control status...')
     status = myt.get_remote_control_status()
     charge_info = status['VehicleInfo']['ChargeInfo']
     hvac_info = status['VehicleInfo']['RemoteHvacInfo']
-    print('Battery level {} %, EV range {} km, Inside temperature {}, Charging status {}, status read at {}'.format(
+    print('Battery level {} %, EV range {} km, Inside temperature {}, Charging status {}, status reported at {}'.format(
         charge_info['ChargeRemainingAmount'], charge_info['EvDistanceWithAirCoInKm'], hvac_info['InsideTemperature'],
         charge_info['ChargingStatus'], pendulum.parse(status['VehicleInfo']['AcquisitionDatetime']).
-            in_tz(myt.config_data['timezone']).to_datetime_string()
+        in_tz(myt.config_data['timezone']).to_datetime_string()
     ))
+    if charge_info['ChargingStatus'] == 'charging' and charge_info['RemainingChargeTime'] != 65536:
+        acquisition_datetime = pendulum.parse(status['VehicleInfo']['AcquisitionDatetime'])
+        charging_end_time = acquisition_datetime.add(minutes=charge_info['RemainingChargeTime'])
+        print('Charging will be completed at {}'.format(charging_end_time.in_tz(myt.config_data['timezone']).
+                                                        to_datetime_string()))
 
     # Get detailed information about trips and calculate cumulative kilometers and fuel liters
     kms = 0
