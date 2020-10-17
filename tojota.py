@@ -287,6 +287,30 @@ def insert_into_influxdb(measurement, value):
     requests.post(INFLUXDB_URL, headers=headers, data=payload)
 
 
+def remote_control_to_db(charge_info, fresh, hvac_info, myt):
+    if fresh and myt.config_data['use_influxdb']:
+        log.debug('Saving remote control data to influxdb')
+        insert_into_influxdb('charge_level', charge_info['ChargeRemainingAmount'])
+        insert_into_influxdb('ev_range', charge_info['EvDistanceWithAirCoInKm'])
+        insert_into_influxdb('charge_type', charge_info['ChargeType'])
+        insert_into_influxdb('charge_week', charge_info['ChargeWeek'])
+        insert_into_influxdb('connector_status', charge_info['ConnectorStatus'])
+        insert_into_influxdb('substraction_rate', charge_info['EvTravelableDistanceSubtractionRate'])
+        insert_into_influxdb('plugin_history', charge_info['PlugInHistory'])
+        insert_into_influxdb('plugin_status', charge_info['PlugStatus'])
+
+        insert_into_influxdb('temperature_inside', hvac_info['InsideTemperature'])
+        insert_into_influxdb('temperature_setting', hvac_info['SettingTemperature'])
+        insert_into_influxdb('temperature_level', hvac_info['Temperaturelevel'])
+
+
+def odometer_to_db(fresh, fuel_percent, myt, odometer):
+    if fresh and myt.config_data['use_influxdb']:
+        log.debug('Saving odometer data to influxdb')
+        insert_into_influxdb('odometer', odometer)
+        insert_into_influxdb('fuel_level', fuel_percent)
+
+
 def main():
     """
     Get trips, get parking information, get trips information
@@ -323,22 +347,26 @@ def main():
     log.info('Get odometer info...')
     odometer, odometer_unit, fuel_percent, fresh = myt.get_odometer_fuel()
     print('Odometer {} {}, {}% fuel left'.format(odometer, odometer_unit, fuel_percent))
+    odometer_to_db(fresh, fuel_percent, myt, odometer)
 
     # Get remote control status
-    log.info('Get remote control status...')
-    status, fresh = myt.get_remote_control_status()
-    charge_info = status['VehicleInfo']['ChargeInfo']
-    hvac_info = status['VehicleInfo']['RemoteHvacInfo']
-    print('Battery level {} %, EV range {} km, Inside temperature {}, Charging status {}, status reported at {}'.format(
-        charge_info['ChargeRemainingAmount'], charge_info['EvDistanceWithAirCoInKm'], hvac_info['InsideTemperature'],
-        charge_info['ChargingStatus'], pendulum.parse(status['VehicleInfo']['AcquisitionDatetime']).
-        in_tz(myt.config_data['timezone']).to_datetime_string()
-    ))
-    if charge_info['ChargingStatus'] == 'charging' and charge_info['RemainingChargeTime'] != 65535:
-        acquisition_datetime = pendulum.parse(status['VehicleInfo']['AcquisitionDatetime'])
-        charging_end_time = acquisition_datetime.add(minutes=charge_info['RemainingChargeTime'])
-        print('Charging will be completed at {}'.format(charging_end_time.in_tz(myt.config_data['timezone']).
-                                                        to_datetime_string()))
+    if myt.config_data['use_remote_control']:
+        log.info('Get remote control status...')
+        status, fresh = myt.get_remote_control_status()
+        charge_info = status['VehicleInfo']['ChargeInfo']
+        hvac_info = status['VehicleInfo']['RemoteHvacInfo']
+        print('Battery level {} %, EV range {} km, Inside temperature {}, Charging status {}, status reported at {}'.
+              format(charge_info['ChargeRemainingAmount'], charge_info['EvDistanceWithAirCoInKm'],
+                     hvac_info['InsideTemperature'], charge_info['ChargingStatus'],
+                     pendulum.parse(status['VehicleInfo']['AcquisitionDatetime']).
+                     in_tz(myt.config_data['timezone']).to_datetime_string()
+                     ))
+        if charge_info['ChargingStatus'] == 'charging' and charge_info['RemainingChargeTime'] != 65535:
+            acquisition_datetime = pendulum.parse(status['VehicleInfo']['AcquisitionDatetime'])
+            charging_end_time = acquisition_datetime.add(minutes=charge_info['RemainingChargeTime'])
+            print('Charging will be completed at {}'.format(charging_end_time.in_tz(myt.config_data['timezone']).
+                                                            to_datetime_string()))
+        remote_control_to_db(charge_info, fresh, hvac_info, myt)
 
     # Get detailed information about trips and calculate cumulative kilometers and fuel liters
     kms = 0
