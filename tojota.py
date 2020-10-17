@@ -19,6 +19,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import platform
 import sys
 
 import pendulum
@@ -102,6 +103,8 @@ class Myt:
         :param contents: String to be written
         :return:
         """
+        if platform.system() == 'Windows':
+            file_path = str(file_path).replace(':', '')
         with open(file_path, 'w') as f:
             f.write(contents)
 
