@@ -6,12 +6,14 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
 # Installation
 
 - Create virtual environment
-- On Windows platform run `pip install pip==18.1` because of [pendulum bug](https://github.com/sdispater/pendulum/issues/454)
 - Install requirements `pip install -r requirements.txt`
 
 # Usage
 
 - Configure your MyT user account, password and vehicle VIN into `configs/myt.json`
+- If your vehicle doesn't support remote control functions, set "use_remote_control": false in the config file
+- If you would like to save data to InfluxDB, install InfluxDB ( https://www.influxdata.com/ ) and create database
+  'tojota' and set "use_influxdb": true in the config file
 - Run `python tojota.py` to fetch, save and print data
 - Data is saved to cache directory for further usage
 
@@ -548,7 +550,7 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
 ```
 
 ## parking.json
-
+- address field is not being updated since July 2020. See parking address from latest trip endAddress instead.
 ```
 {
   "event": {
@@ -575,4 +577,44 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
     "value": 22
   }
 ]
+```
+
+## remote_control.json
+```
+{
+  "ReturnCode": "000000",
+  "VehicleInfo": {
+    "AcquisitionDatetime": "2020-10-17T06:08:36Z",
+    "ChargeInfo": {
+      "BatteryPowerSupplyPossibleTime": 16383,
+      "ChargeEndTime": "00:00",
+      "ChargeRemainingAmount": 100,
+      "ChargeStartTime": "22:10",
+      "ChargeType": 1,
+      "ChargeWeek": 5,
+      "ChargingStatus": "chargeComplete",
+      "ConnectorStatus": 5,
+      "EvDistanceInKm": 79.9,
+      "EvDistanceWithAirCoInKm": 73.51,
+      "EvTravelableDistance": 79.9,
+      "EvTravelableDistanceSubtractionRate": 8,
+      "PlugInHistory": 33,
+      "PlugStatus": 45,
+      "RemainingChargeTime": 65535,
+      "SettingChangeAcceptanceStatus": 0
+    },
+    "RemoteHvacInfo": {
+      "BlowerStatus": 0,
+      "FrontDefoggerStatus": 0,
+      "InsideTemperature": 22,
+      "LatestAcStartTime": "2020-10-16T03:50:15Z",
+      "RearDefoggerStatus": 0,
+      "RemoteHvacMode": 0,
+      "RemoteHvacProhibitionSignal": 1,
+      "SettingTemperature": 21,
+      "TemperatureDisplayFlag": 0,
+      "Temperaturelevel": 29
+    }
+  }
+}
 ```
