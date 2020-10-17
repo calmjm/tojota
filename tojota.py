@@ -140,8 +140,9 @@ class Myt:
         trip or daily because of changing metadata if no new trips. Saved information is not currently used for
         anything.
         :param trip: There is paging, but it doesn't seem to do anything. 1 is the default value.
-        :return: recentTrips dict
+        :return: recentTrips dict, fresh boolean True is new data was fetched
         """
+        fresh = False
         trips_path = Path(CACHE_DIR) / 'trips'
         trips_file = trips_path / 'trips-{}'.format(pendulum.now())
         log.info('Fetching trips...')
@@ -154,8 +155,9 @@ class Myt:
         previous_trip = self._read_file(self._find_latest_file(str(trips_path / 'trips*')))
         if r.text != previous_trip:
             self._write_file(trips_file, r.text)
+            fresh = True
         trips = r.json()
-        return trips
+        return trips, fresh
 
     def get_trip(self, trip_id):
         """
@@ -186,8 +188,9 @@ class Myt:
         Get location information. Location is saved when vehicle is powered off. Save data to
         CACHE_DIR/parking/parking-`datetime` file. Saved information is not currently used for anything. When vehicle
         is powered on again tripStatus will change to '1'.
-        :return: Location dict
+        :return: Location dict, fresh Boolean if new data was fetched
         """
+        fresh = False
         parking_path = Path(CACHE_DIR) / 'parking'
         parking_file = parking_path / 'parking-{}'.format(pendulum.now())
         token = self.user_data['token']
@@ -202,14 +205,16 @@ class Myt:
         previous_parking = self._read_file(self._find_latest_file(str(parking_path / 'parking*')))
         if r.text != previous_parking:
             self._write_file(parking_file, r.text)
-        return r.json()
+            fresh = True
+        return r.json(), fresh
 
     def get_odometer_fuel(self):
         """
         Get mileage and fuel tank information. Data is saved when vehicle is powered off. Save data to
         CACHE_DIR/odometer/odometer-`datetime` file.
-        :return: list(odometer, odometer_unit, fuel_percentage)
+        :return: list(odometer, odometer_unit, fuel_percentage, fresh)
         """
+        fresh = False
         odometer_path = Path(CACHE_DIR) / 'odometer'
         odometer_file = odometer_path / 'odometer-{}'.format(pendulum.now())
         token = self.user_data['token']
@@ -223,6 +228,7 @@ class Myt:
         previous_odometer = self._read_file(self._find_latest_file(str(odometer_path / 'odometer*')))
         if r.text != previous_odometer:
             self._write_file(odometer_file, r.text)
+            fresh = True
         data = r.json()
         odometer = 0
         odometer_unit = ''
@@ -233,14 +239,15 @@ class Myt:
                 odometer_unit = item['unit']
             if item['type'] == 'Fuel':
                 fuel = item['value']
-        return odometer, odometer_unit, fuel
+        return odometer, odometer_unit, fuel, fresh
 
     def get_remote_control_status(self):
         """
         Get location information. Location is saved when vehicle is powered off. Save data to
         CACHE_DIR/remote_control/remote_control-`datetime` file.
-        :return: Location dict
+        :return: Location dict, fresh Boolean if new data was fetched
         """
+        fresh = False
         remote_control_path = Path(CACHE_DIR) / 'remote_control'
         remote_control_file = remote_control_path / 'remote_control-{}'.format(pendulum.now())
         token = self.user_data['token']
@@ -263,7 +270,8 @@ class Myt:
 
         if data != previous_remote_control:
             self._write_file(remote_control_file, json.dumps(r.json(), sort_keys=True))
-        return data
+            fresh = True
+        return data, fresh
 
 
 def main():
@@ -275,16 +283,16 @@ def main():
 
     # Try to fetch trips array with existing user_info. If it fails, do new login and try again.
     try:
-        trips = myt.get_trips()
+        trips, fresh = myt.get_trips()
     except ValueError:
         log.info('Failed to use cached token, doing fresh login...')
         myt.login()
-        trips = myt.get_trips()
+        trips, fresh = myt.get_trips()
 
     # Check is vehicle is still parked or moving and print corresponding information. Parking timestamp is epoch
     # timestamp with microseconds. Actual value seems to be at second precision level.
     log.info('Get parking info...')
-    parking = myt.get_parking()
+    parking, fresh = myt.get_parking()
     if parking['tripStatus'] == '0':
         print('Car is parked at {} at {}'.format(parking['event']['address'],
                                                  pendulum.from_timestamp(int(parking['event']['timestamp']) / 1000).
@@ -296,12 +304,12 @@ def main():
 
     # Get odometer and fuel tank status
     log.info('Get odometer info...')
-    odometer, odometer_unit, fuel_percent = myt.get_odometer_fuel()
+    odometer, odometer_unit, fuel_percent, fresh = myt.get_odometer_fuel()
     print('Odometer {} {}, {}% fuel left'.format(odometer, odometer_unit, fuel_percent))
 
     # Get remote control status
     log.info('Get remote control status...')
-    status = myt.get_remote_control_status()
+    status, fresh = myt.get_remote_control_status()
     charge_info = status['VehicleInfo']['ChargeInfo']
     hvac_info = status['VehicleInfo']['RemoteHvacInfo']
     print('Battery level {} %, EV range {} km, Inside temperature {}, Charging status {}, status reported at {}'.format(
@@ -309,7 +317,7 @@ def main():
         charge_info['ChargingStatus'], pendulum.parse(status['VehicleInfo']['AcquisitionDatetime']).
         in_tz(myt.config_data['timezone']).to_datetime_string()
     ))
-    if charge_info['ChargingStatus'] == 'charging' and charge_info['RemainingChargeTime'] != 65536:
+    if charge_info['ChargingStatus'] == 'charging' and charge_info['RemainingChargeTime'] != 65535:
         acquisition_datetime = pendulum.parse(status['VehicleInfo']['AcquisitionDatetime'])
         charging_end_time = acquisition_datetime.add(minutes=charge_info['RemainingChargeTime'])
         print('Charging will be completed at {}'.format(charging_end_time.in_tz(myt.config_data['timezone']).
