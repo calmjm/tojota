@@ -30,6 +30,7 @@ log.setLevel(logging.DEBUG)
 
 CACHE_DIR = 'cache'
 USER_DATA = 'user_data.json'
+INFLUXDB_URL = 'http://localhost:8086/write?db=tojota'
 
 
 class Myt:
@@ -274,6 +275,18 @@ class Myt:
         return data, fresh
 
 
+def insert_into_influxdb(measurement, value):
+    """
+    Insert data into influxdb (without authentication)
+    :param measurement: Measurement name
+    :param value: Measurement value
+    :return: null
+    """
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    payload = "{} value={}".format(measurement, value)
+    requests.post(INFLUXDB_URL, headers=headers, data=payload)
+
+
 def main():
     """
     Get trips, get parking information, get trips information
@@ -288,13 +301,17 @@ def main():
         log.info('Failed to use cached token, doing fresh login...')
         myt.login()
         trips, fresh = myt.get_trips()
+    try:
+        latest_address = trips['recentTrips'][0]['endAddress']
+    except KeyError:
+        latest_address = 'Unknown address'
 
     # Check is vehicle is still parked or moving and print corresponding information. Parking timestamp is epoch
     # timestamp with microseconds. Actual value seems to be at second precision level.
     log.info('Get parking info...')
     parking, fresh = myt.get_parking()
     if parking['tripStatus'] == '0':
-        print('Car is parked at {} at {}'.format(parking['event']['address'],
+        print('Car is parked at {} at {}'.format(latest_address,
                                                  pendulum.from_timestamp(int(parking['event']['timestamp']) / 1000).
                                                  in_tz(myt.config_data['timezone']).to_datetime_string()))
     else:
