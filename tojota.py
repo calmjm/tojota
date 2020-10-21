@@ -168,8 +168,9 @@ class Myt:
         Get trip info. Trip is identified by uuidv4. Save trip data to CACHE_DIR/trips/[12]/[34]/uuid file. If given
         trip already exists in CACHE_DIR just get it from there.
         :param trip_id: tripId to fetch. uuid v4 that is received from get_trips().
-        :return: trip dict
+        :return: trip dict, fresh boolean True is new data was fetched
         """
+        fresh = False
         trip_base_path = Path(CACHE_DIR) / 'trips'
         trip_path = trip_base_path / trip_id[0:2] / trip_id[2:4]
         trip_file = trip_path / trip_id
@@ -182,10 +183,11 @@ class Myt:
             os.makedirs(trip_path, exist_ok=True)
             self._write_file(trip_file, r.text)
             trip_data = r.json()
+            fresh = True
         else:
             with open(trip_file) as f:
                 trip_data = json.load(f)
-        return trip_data
+        return trip_data, fresh
 
     def get_parking(self):
         """
@@ -290,7 +292,7 @@ def insert_into_influxdb(measurement, value):
     requests.post(INFLUXDB_URL, headers=headers, data=payload)
 
 
-def remote_control_to_db(charge_info, fresh, hvac_info, myt):
+def remote_control_to_db(myt, fresh, charge_info, hvac_info):
     if fresh and myt.config_data['use_influxdb']:
         log.debug('Saving remote control data to influxdb')
         insert_into_influxdb('charge_level', charge_info['ChargeRemainingAmount'])
@@ -298,7 +300,7 @@ def remote_control_to_db(charge_info, fresh, hvac_info, myt):
         insert_into_influxdb('charge_type', charge_info['ChargeType'])
         insert_into_influxdb('charge_week', charge_info['ChargeWeek'])
         insert_into_influxdb('connector_status', charge_info['ConnectorStatus'])
-        insert_into_influxdb('substraction_rate', charge_info['EvTravelableDistanceSubtractionRate'])
+        insert_into_influxdb('subtraction_rate', charge_info['EvTravelableDistanceSubtractionRate'])
         insert_into_influxdb('plugin_history', charge_info['PlugInHistory'])
         insert_into_influxdb('plugin_status', charge_info['PlugStatus'])
 
@@ -307,11 +309,18 @@ def remote_control_to_db(charge_info, fresh, hvac_info, myt):
         insert_into_influxdb('temperature_level', hvac_info['Temperaturelevel'])
 
 
-def odometer_to_db(fresh, fuel_percent, myt, odometer):
+def odometer_to_db(myt, fresh, fuel_percent, odometer):
     if fresh and myt.config_data['use_influxdb']:
         log.debug('Saving odometer data to influxdb')
         insert_into_influxdb('odometer', odometer)
         insert_into_influxdb('fuel_level', fuel_percent)
+
+
+def trip_data_to_db(myt, fresh, average_consumption, stats):
+    if fresh and myt.config_data['use_influxdb']:
+        insert_into_influxdb('trip_kilometers', stats['totalDistanceInKm'])
+        insert_into_influxdb('trip_liters', stats['fuelConsumptionInL'])
+        insert_into_influxdb('trip_average_consumption', average_consumption)
 
 
 def main():
@@ -350,7 +359,7 @@ def main():
     log.info('Get odometer info...')
     odometer, odometer_unit, fuel_percent, fresh = myt.get_odometer_fuel()
     print('Odometer {} {}, {}% fuel left'.format(odometer, odometer_unit, fuel_percent))
-    odometer_to_db(fresh, fuel_percent, myt, odometer)
+    odometer_to_db(myt, fresh, fuel_percent, odometer)
 
     # Get remote control status
     if myt.config_data['use_remote_control']:
@@ -369,13 +378,15 @@ def main():
             charging_end_time = acquisition_datetime.add(minutes=charge_info['RemainingChargeTime'])
             print('Charging will be completed at {}'.format(charging_end_time.in_tz(myt.config_data['timezone']).
                                                             to_datetime_string()))
-        remote_control_to_db(charge_info, fresh, hvac_info, myt)
+        remote_control_to_db(myt, fresh, charge_info, hvac_info)
 
     # Get detailed information about trips and calculate cumulative kilometers and fuel liters
     kms = 0
     ls = 0
+    fresh_data = 0
     for trip in trips['recentTrips']:
-        trip_data = myt.get_trip(trip['tripId'])
+        trip_data, fresh = myt.get_trip(trip['tripId'])
+        fresh_data += fresh
         stats = trip_data['statistics']
         # Parse UTC datetime strings to local time
         start_time = pendulum.parse(trip['startTimeGmt']).in_tz(myt.config_data['timezone']).to_datetime_string()
@@ -394,11 +405,12 @@ def main():
         kms += stats['totalDistanceInKm']
         ls += stats['fuelConsumptionInL']
         average_consumption = (stats['fuelConsumptionInL']/stats['totalDistanceInKm'])*100
-        print('{} {} -> {} {}: {} km, {} km/h, {:.2f} l/100 km'.format(start_time, start_address, end_time,
-                                                                       end_address, stats['totalDistanceInKm'],
-                                                                       stats['averageSpeedInKmph'],
-                                                                       average_consumption))
-
+        trip_data_to_db(myt, fresh, average_consumption, stats)
+        print('{} {} -> {} {}: {} km, {} km/h, {:.2f} l/100 km, {:.2f} l'.
+              format(start_time, start_address, end_time, end_address, stats['totalDistanceInKm'],
+                     stats['averageSpeedInKmph'], average_consumption, stats['fuelConsumptionInL']))
+    if fresh_data and myt.config_data['use_influxdb']:
+        insert_into_influxdb('short_term_average_consumption', (ls/kms)*100)
     print('Total distance: {:.3f} km, Fuel consumption: {:.2f} l, {:.2f} l/100 km'.format(kms, ls, (ls/kms)*100))
 
 
