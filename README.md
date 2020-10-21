@@ -17,11 +17,40 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
 - Run `python tojota.py` to fetch, save and print data
 - Data is saved to cache directory for further usage
 
+# Example run
+```
+$ python tojota.py
+2020-10-21 22:10:44,132:__main__:INFO: Fetching trips...
+2020-10-21 22:10:45,692:__main__:INFO: Get parking info...
+Car is parked at Xxxxxkatu 16, 91800 Tyrnävä, Finland at 2020-10-21 16:30:15
+2020-10-21 22:10:46,195:__main__:INFO: Get odometer info...
+Odometer 3682 km, 10.0% fuel left
+2020-10-21 22:10:46,580:__main__:INFO: Get remote control status...
+Battery level 30%, EV range 0.0 km, Inside temperature 24, Charging status waitingForCharging, status reported at 2020-10-21 16:32:18
+2020-10-21 16:04:40 Kangaskontiontie 27, 90240 Oulu -> 2020-10-21 16:30:15 Xxxxxkatu 16, 91800 Tyrnävä: 29.037 km, 68.1 km/h, 2.36 l/100 km, 0.68 l
+2020-10-21 07:19:37 Xxxxxkatu 17, 91800 Tyrnävä -> 2020-10-21 07:45:21 Kangaskontiontie 27, 90240 Oulu: 28.19 km, 65.73 km/h, 0.00 l/100 km, 0.00 l
+2020-10-20 16:03:58 Kangaskontiontie 27, 90240 Oulu -> 2020-10-20 16:28:14 Xxxxxkatu 16, 91800 Tyrnävä: 29.028 km, 71.77 km/h, 2.48 l/100 km, 0.72 l
+2020-10-20 07:18:15 Xxxxxkatu 16, 91800 Tyrnävä -> 2020-10-20 07:41:46 Kangaskontiontie 27, 90240 Oulu: 28.193 km, 71.93 km/h, 0.00 l/100 km, 0.00 l
+2020-10-19 16:45:29 Pauketie 4, 90410 Oulu -> 2020-10-19 17:08:13 Xxxxxkatu 16, 91800 Tyrnävä: 26.595 km, 70.19 km/h, 3.74 l/100 km, 0.99 l
+2020-10-19 16:03:41 Kangaskontiontie 27, 90240 Oulu -> 2020-10-19 16:13:17 Pauketie 4, 90410 Oulu: 5.521 km, 34.51 km/h, 0.00 l/100 km, 0.00 l
+2020-10-19 08:48:34 K Irkkotie 9, 91800 Tyrnävä -> 2020-10-19 09:12:00 Kangaskontiontie 27, 90240 Oulu: 28.521 km, 73.03 km/h, 0.00 l/100 km, 0.00 l
+2020-10-19 08:06:19 Xxxxxkatu 16, 91800 Tyrnävä -> 2020-10-19 08:10:34 K Irkkotie 10, 91800 Tyrnävä: 1.488 km, 21.01 km/h, 0.00 l/100 km, 0.00 l
+2020-10-16 17:02:41 Myllytie 1, 90450 Kempele -> 2020-10-16 17:20:55 Xxxxxkatu 16, 91800 Tyrnävä: 19.36 km, 63.71 km/h, 0.36 l/100 km, 0.07 l
+2020-10-16 16:34:50 Myllytie 5, 90450 Kempele -> 2020-10-16 16:36:07 Myllytie 1, 90450 Kempele: 0.227 km, 10.61 km/h, 0.00 l/100 km, 0.00 l
+2020-10-16 16:15:52 Kangaskontiontie 27, 90240 Oulu -> 2020-10-16 16:28:43 Myllytie 5, 90450 Kempele: 11.258 km, 52.57 km/h, 0.00 l/100 km, 0.00 l
+2020-10-16 07:17:01 Xxxxxkatu 16, 91800 Tyrnävä -> 2020-10-16 07:41:49 Kangaskontiontie 27, 90240 Oulu: 28.189 km, 68.2 km/h, 1.59 l/100 km, 0.45 l
+2020-10-15 16:06:18 Kangaskontiontie 27, 90240 Oulu -> 2020-10-15 16:30:59 Xxxxxkatu 16, 91800 Tyrnävä: 29.013 km, 70.52 km/h, 2.32 l/100 km, 0.67 l
+2020-10-15 11:59:21 Nujulantie, 90410 Oulu -> 2020-10-15 12:06:01 Kangaskontiontie 27, 90240 Oulu: 3.626 km, 32.63 km/h, 0.00 l/100 km, 0.00 l
+2020-10-15 11:18:32 Kangaskontiontie 27, 90240 Oulu -> 2020-10-15 11:25:22 Nujulantie, 90410 Oulu: 3.591 km, 31.53 km/h, 0.00 l/100 km, 0.00 l
+2020-10-15 07:18:59 Xxxxxkatu 16, 91800 Tyrnävä -> 2020-10-15 07:43:23 Kangaskontiontie 27, 90240 Oulu: 28.193 km, 69.33 km/h, 0.00 l/100 km, 0.00 l
+Total distance: 300.030 km, Fuel consumption: 3.59 l, 1.20 l/100 km
+```
+
 # Example data
 
 ## trips.json
 
-```
+```json
 {
   "recentTrips": [
     {
@@ -115,7 +144,7 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
 
 ## trip.json
 
-```
+```json
 {
   "tripEvents": [
     {
@@ -551,7 +580,7 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
 
 ## parking.json
 - address field is not being updated since July 2020. See parking address from latest trip endAddress instead.
-```
+```json
 {
   "event": {
     "lat": "64.7704251",
@@ -565,7 +594,7 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
 
 ## mileage.json
 
-```
+```json
 [
   {
     "type": "mileage",
@@ -580,7 +609,7 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
 ```
 
 ## remote_control.json
-```
+```json
 {
   "ReturnCode": "000000",
   "VehicleInfo": {
