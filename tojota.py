@@ -367,7 +367,7 @@ def main():
         status, fresh = myt.get_remote_control_status()
         charge_info = status['VehicleInfo']['ChargeInfo']
         hvac_info = status['VehicleInfo']['RemoteHvacInfo']
-        print('Battery level {} %, EV range {} km, Inside temperature {}, Charging status {}, status reported at {}'.
+        print('Battery level {}%, EV range {} km, Inside temperature {}, Charging status {}, status reported at {}'.
               format(charge_info['ChargeRemainingAmount'], charge_info['EvDistanceWithAirCoInKm'],
                      hvac_info['InsideTemperature'], charge_info['ChargingStatus'],
                      pendulum.parse(status['VehicleInfo']['AcquisitionDatetime']).
