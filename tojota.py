@@ -339,7 +339,7 @@ def main():
         trips, fresh = myt.get_trips()
     try:
         latest_address = trips['recentTrips'][0]['endAddress']
-    except KeyError:
+    except (KeyError, IndexError):
         latest_address = 'Unknown address'
 
     # Check is vehicle is still parked or moving and print corresponding information. Parking timestamp is epoch
@@ -351,7 +351,7 @@ def main():
                                                  pendulum.from_timestamp(int(parking['event']['timestamp']) / 1000).
                                                  in_tz(myt.config_data['timezone']).to_datetime_string()))
     else:
-        print('Car left from {} parked at {}'.format(parking['event']['address'],
+        print('Car left from {} parked at {}'.format(latest_address,
                                                      pendulum.from_timestamp(int(parking['event']['timestamp']) / 1000).
                                                      in_tz(myt.config_data['timezone']).to_datetime_string()))
 

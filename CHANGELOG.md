@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.3] - 2020-11-09
+
+### Fixed
+
+- Fixed https://github.com/calmjm/tojota/issues/13, exception when latest address is not available
+
 ## [0.0.2] - 2020-10-21
 
 ### Added
