@@ -5,6 +5,7 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
 
 # Installation
 
+- Have Python 3.6+
 - Create virtual environment
 - Install requirements `pip install -r requirements.txt`
 

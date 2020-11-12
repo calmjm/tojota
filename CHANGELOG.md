@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.4] - 2020-11-12
+
+### Added
+
+- Function to get driving statistics
+- Example script to print daily/weekly/yearly driving statistics, statistics.py
+
 ## [0.0.3] - 2020-11-09
 
 ### Fixed
