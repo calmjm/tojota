@@ -279,6 +279,42 @@ class Myt:
             fresh = True
         return data, fresh
 
+    def get_driving_statistics(self, date_from=None, interval='day'):
+        """
+        Get driving statistics information. Save data to
+        CACHE_DIR/statistics/statistics-`datetime` file.
+
+        :param: interval 'day' 'week', if interval is None, yearly statistics are returned (set date_from -365 days)
+        :param: date_from '2020-11-01', max -60 days for Day Interval and max -120 days for Week Interval
+        :return: statistics dict, fresh Boolean if new data was fetched
+        """
+        fresh = False
+        statistics_path = Path(CACHE_DIR) / 'statistics'
+        statistics_file = statistics_path / 'statistics-{}'.format(pendulum.now())
+        token = self.user_data['token']
+        uuid = self.user_data['customerProfile']['uuid']
+        vin = self.config_data['vin']
+        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'uuid': uuid, 'vin': vin}
+        url = 'https://myt-agg.toyota-europe.com/cma/api/v2/trips/summarize'
+        params = {'from': date_from, 'calendarInterval': interval}
+        r = requests.get(url, headers=headers, params=params)
+        if r.status_code != 200:
+            raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
+        data = r.json()
+        os.makedirs(statistics_path, exist_ok=True)
+
+        try:
+            previous_statistics = json.loads(self._read_file(self._find_latest_file(str(
+                statistics_path / 'statistics*'))))
+        except TypeError:
+            previous_statistics = None
+
+        if data != previous_statistics:
+            self._write_file(statistics_file, json.dumps(r.json(), sort_keys=True))
+            fresh = True
+
+        return data, fresh
+
 
 def insert_into_influxdb(measurement, value):
     """
