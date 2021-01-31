@@ -94,7 +94,7 @@ def parse_weekly_driving_statistics(data):
             # If there is not this field in data it means drive was full EV. Set fuel consumed to 0.
             data['totalFuelConsumedInL'] = 0
         try:
-            print('{}: EV: {:.1f}/{:.1f} km, {:.0f}%, avg/max speed: {:.0f}/{:.0f} km/h, trips/night count: {}/{}, fuel consumption: {:.2f}'.
+            print('{}: EV: {:.1f}/{:.1f} km, {:.0f}%, avg/max speed: {:.0f}/{:.0f} km/h, trips/night count: {}/{}, fuel consumption: {:.2f} l/100 km'.
                   format(date.format('YYYY-MM-DD'), data['evDistanceInKm'],
                          data['totalDistanceInKm'], data['evDistancePercentage'],
                          data['averageSpeedInKmph'], data['maxSpeedInKmph'],
@@ -102,7 +102,7 @@ def parse_weekly_driving_statistics(data):
                          data['totalFuelConsumedInL']))
         except KeyError:
             log.warning('No EV driving data!')
-            print('{}: {:.1f} km, avg/max speed: {:.0f}/{:.0f} km/h, trips/night count: {}/{}, fuel consumption: {:.2f}'.
+            print('{}: {:.1f} km, avg/max speed: {:.0f}/{:.0f} km/h, trips/night count: {}/{}, fuel consumption: {:.2f} l/100 km'.
                   format(date.format('YYYY-MM-DD'),
                          data['totalDistanceInKm'],
                          data['averageSpeedInKmph'], data['maxSpeedInKmph'],
