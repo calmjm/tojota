@@ -339,6 +339,7 @@ def remote_control_to_db(myt, fresh, charge_info, hvac_info):
         insert_into_influxdb('subtraction_rate', charge_info['EvTravelableDistanceSubtractionRate'])
         insert_into_influxdb('plugin_history', charge_info['PlugInHistory'])
         insert_into_influxdb('plugin_status', charge_info['PlugStatus'])
+        insert_into_influxdb('hv_range', charge_info['GasolineTravelableDistance'])
 
         insert_into_influxdb('temperature_inside', hvac_info['InsideTemperature'])
         insert_into_influxdb('temperature_setting', hvac_info['SettingTemperature'])
@@ -406,8 +407,9 @@ def main():
         status, fresh = myt.get_remote_control_status()
         charge_info = status['VehicleInfo']['ChargeInfo']
         hvac_info = status['VehicleInfo']['RemoteHvacInfo']
-        print('Battery level {}%, EV range {} km, Inside temperature {}, Charging status {}, status reported at {}'.
+        print('Battery level {}%, EV range {} km, HV range {} km, Inside temperature {}, Charging status {}, status reported at {}'.
               format(charge_info['ChargeRemainingAmount'], charge_info['EvDistanceWithAirCoInKm'],
+                     charge_info['GasolineTravelableDistance'],
                      hvac_info['InsideTemperature'], charge_info['ChargingStatus'],
                      pendulum.parse(status['VehicleInfo']['AcquisitionDatetime']).
                      in_tz(myt.config_data['timezone']).to_datetime_string()
@@ -417,6 +419,14 @@ def main():
             charging_end_time = acquisition_datetime.add(minutes=charge_info['RemainingChargeTime'])
             print('Charging will be completed at {}'.format(charging_end_time.in_tz(myt.config_data['timezone']).
                                                             to_datetime_string()))
+        if hvac_info['RemoteHvacMode']:
+            front = 'On' if hvac_info['FrontDefoggerStatus'] else 'Off'
+            rear = 'On' if hvac_info['RearDefoggerStatus'] else 'Off'
+
+            print('HVAC is on since {}. Remaining heating time {} minutes. Windscreen heating is {}, rear window heating is {}.'.format(
+                pendulum.parse(hvac_info['LatestAcStartTime']).in_tz(myt.config_data['timezone']).to_datetime_string(),
+                hvac_info['RemainingMinutes'], front, rear))
+
         remote_control_to_db(myt, fresh, charge_info, hvac_info)
 
     # Get detailed information about trips and calculate cumulative kilometers and fuel liters

@@ -4,6 +4,8 @@
 
 ### Added
 
+- Print out HV range
+- Print out heating information when preheating is on
 - More statistics to be print out
 
 ### Fixed
