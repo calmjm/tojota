@@ -72,7 +72,7 @@ class Myt:
         :return: user_data dict or None
         """
         try:
-            with open(Path(CACHE_DIR) / USER_DATA) as f:
+            with open(Path(CACHE_DIR) / USER_DATA, encoding='utf-8') as f:
                 try:
                     user_data = json.load(f)
                 except Exception as e:  # pylint: disable=W0703
@@ -90,7 +90,7 @@ class Myt:
         :return: File contents
         """
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path, 'r', encoding='utf-8') as f:
                 return f.read()
         except (FileNotFoundError, TypeError):
             return None
@@ -105,7 +105,7 @@ class Myt:
         """
         if platform.system() == 'Windows':
             file_path = str(file_path).replace(':', '')
-        with open(file_path, 'w') as f:
+        with open(file_path, 'w', encoding='utf-8') as f:
             f.write(contents)
 
     @staticmethod
@@ -185,7 +185,7 @@ class Myt:
             trip_data = r.json()
             fresh = True
         else:
-            with open(trip_file) as f:
+            with open(trip_file, encoding='utf-8') as f:
                 trip_data = json.load(f)
         return trip_data, fresh
 
