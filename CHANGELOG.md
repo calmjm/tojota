@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.0.5] - 2021-01-31
+
+### Added
+
+- More statistics to be print out
+
+### Fixed
+
+- Remote control API started to require (dummy) locale header
+- Print out statistics missing EV data
+- Statistics works at the beginning of the year, https://github.com/calmjm/tojota/issues/18
+- Enforced UTF-8 when handling cache files, https://github.com/calmjm/tojota/issues/17
+- Don't crash on missing parking info, https://github.com/calmjm/tojota/issues/16
+
 ## [0.0.4] - 2020-11-12
 
 ### Added
