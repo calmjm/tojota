@@ -44,7 +44,8 @@ def parse_daily_driving_statistics(myt, data):
     """
     for item in data['histogram']:
         year = item['bucket']['year']
-        day_of_year = item['bucket']['dayOfYear']
+        # pendulum formatter expects date to have three characters to be accepted as day of the year. Add leading zeros.
+        day_of_year = f"{item['bucket']['dayOfYear']:03d}"
         date = pendulum.from_format(f'{year} {day_of_year}', 'YYYY DDDD', tz=myt.config_data['timezone'])
         data = item['data']
         print('{}: EV: {:.1f}/{:.1f} km, {:.0f}%, avg speed: {:.0f} km/h, max speed: {:.0f} km/h'.
