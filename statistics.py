@@ -144,13 +144,13 @@ def main():
     from_date = None
     if args.interval == 'day':
         interval = args.interval
-        from_date = pendulum.now().subtract(days=30).format('YYYY-MM-DD')
+        from_date = pendulum.now().subtract(days=1).format('YYYY-MM-DD')
     if args.interval == 'week':
         interval = args.interval
-        from_date = pendulum.now().subtract(days=120).format('YYYY-MM-DD')
+        from_date = pendulum.now().start_of('week').subtract(days=1).format('YYYY-MM-DD')
     if args.interval == 'year':
         interval = None
-        from_date = pendulum.now().subtract(days=365).format('YYYY-MM-DD')
+        from_date = pendulum.now().format('YYYY-01-01')
     if args.from_date:
         from_date = args.from_date
 
