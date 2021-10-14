@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.6] - 2021-10-14
+
+### Fixed
+
+- Added locale and brand parameters to statistics query to make it work again
+
 ## [0.0.5] - 2021-01-31
 
 ### Added
