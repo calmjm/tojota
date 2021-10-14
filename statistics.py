@@ -58,7 +58,7 @@ def parse_daily_driving_statistics(myt, data):
             # If there is not this field in data it means drive was full EV. Set fuel consumed to 0.
             data['totalFuelConsumedInL'] = 0
         try:
-            print('{}: EV: {:.1f}/{:.1f} km, {:.0f}%, avg/max speed: {:.0f}/{:.0f} km/h, fuel consumption: {:.1f} l/100 km'.
+            print('{}: EV: {:.2f}/{:.2f} km, {:.0f}%, avg/max speed: {:.0f}/{:.0f} km/h, fuel consumption: {:.2f} l/100 km'.
                   format(date.format('YYYY-MM-DD'), data['evDistanceInKm'],
                          data['totalDistanceInKm'], data['evDistancePercentage'],
                          data['averageSpeedInKmph'], data['maxSpeedInKmph'],

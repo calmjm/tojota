@@ -154,7 +154,8 @@ class Myt:
             'https://cpb2cs.toyota-europe.com/api/user/{}/cms/trips/v2/history/vin/{}/{}'.format(
                 self.user_data['customerProfile']['uuid'], self.config_data['vin'], trip), headers=self.headers)
         if r.status_code != 200:
-            raise ValueError('Failed to get data, {} {}'.format(r.status_code, r.headers))
+            raise ValueError('Failed to get data, Status: {} Headers: {} Body: {}'.format(r.status_code, r.headers,
+                                                                                          r.text))
         os.makedirs(trips_path, exist_ok=True)
         previous_trip = self._read_file(self._find_latest_file(str(trips_path / 'trips*')))
         if r.text != previous_trip:
@@ -279,13 +280,14 @@ class Myt:
             fresh = True
         return data, fresh
 
-    def get_driving_statistics(self, date_from=None, interval='day'):
+    def get_driving_statistics(self, date_from=None, interval='day', locale='fi-fi'):
         """
         Get driving statistics information. Save data to
         CACHE_DIR/statistics/statistics-`datetime` file.
 
         :param: interval 'day' 'week', if interval is None, yearly statistics are returned (set date_from -365 days)
         :param: date_from '2020-11-01', max -60 days for Day Interval and max -120 days for Week Interval
+        :param: locale 'en-us', no visible effects but required
         :return: statistics dict, fresh Boolean if new data was fetched
         """
         fresh = False
@@ -294,7 +296,8 @@ class Myt:
         token = self.user_data['token']
         uuid = self.user_data['customerProfile']['uuid']
         vin = self.config_data['vin']
-        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'uuid': uuid, 'vin': vin}
+        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'uuid': uuid, 'vin': vin, 'X-TME-BRAND': 'TOYOTA',
+                   'X-TME-LOCALE': locale}
         url = 'https://myt-agg.toyota-europe.com/cma/api/v2/trips/summarize'
         params = {'from': date_from, 'calendarInterval': interval}
         r = requests.get(url, headers=headers, params=params)
@@ -390,7 +393,8 @@ def main():
                                                      in_tz(myt.config_data['timezone']).to_datetime_string()))
         else:
             print('Car left from {} parked at {}'.format(latest_address,
-                                                         pendulum.from_timestamp(int(parking['event']['timestamp']) / 1000).
+                                                         pendulum.from_timestamp(int(parking['event']['timestamp']) /
+                                                                                 1000).
                                                          in_tz(myt.config_data['timezone']).to_datetime_string()))
     except ValueError:
         print('Didn\'t get parking information!')
