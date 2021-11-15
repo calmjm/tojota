@@ -44,12 +44,10 @@ CONFIG_KEYS = {
     KEY_USE_REMOTE_CONTROL: False
 }
 
-
 class Myt:
     """
     Class for interacting with Toyota vehicle API
     """
-
     def __init__(self):
         """
         Create cache directory, try to load existing user data or if it doesn't exists do login.
@@ -58,8 +56,7 @@ class Myt:
         self.config_data = self._get_config()
         self.user_data = self._get_user_data()
         if self.user_data:
-            self.headers = {
-                'X-TME-TOKEN': self.user_data['token'], 'X-TME-LOCALE': 'fi-fi'}
+            self.headers = {'X-TME-TOKEN': self.user_data['token'], 'X-TME-LOCALE': 'fi-fi'}
         else:
             self.login()
 
@@ -102,7 +99,7 @@ class Myt:
             log.debug('Read %s', x)
 
         return config_data
-
+    
     @staticmethod
     def _get_user_data():
         """
@@ -114,8 +111,7 @@ class Myt:
                 try:
                     user_data = json.load(f)
                 except Exception as e:  # pylint: disable=W0703
-                    log.error(
-                        'Failed to load cached user data JSON! %s', str(e))
+                    log.error('Failed to load cached user data JSON! %s', str(e))
                     raise
             return user_data
         except FileNotFoundError:
@@ -169,11 +165,9 @@ class Myt:
         login_headers = {'X-TME-BRAND': 'TOYOTA', 'X-TME-LC': locale, 'Accept': 'application/json, text/plain, */*',
                          'Sec-Fetch-Dest': 'empty'}
         log.info('Logging in...')
-        r = requests.post('https://ssoms.toyota-europe.com/authenticate',
-                          headers=login_headers, json=self.config_data)
+        r = requests.post('https://ssoms.toyota-europe.com/authenticate', headers=login_headers, json=self.config_data)
         if r.status_code != 200:
-            raise ValueError(
-                'Login failed, check your credentials! {}'.format(r.text))
+            raise ValueError('Login failed, check your credentials! {}'.format(r.text))
         user_data = r.json()
         self.user_data = user_data
         self.headers = {'X-TME-TOKEN': user_data['token']}
@@ -198,8 +192,7 @@ class Myt:
             raise ValueError('Failed to get data, Status: {} Headers: {} Body: {}'.format(r.status_code, r.headers,
                                                                                           r.text))
         os.makedirs(trips_path, exist_ok=True)
-        previous_trip = self._read_file(
-            self._find_latest_file(str(trips_path / 'trips*')))
+        previous_trip = self._read_file(self._find_latest_file(str(trips_path / 'trips*')))
         if r.text != previous_trip:
             self._write_file(trips_file, r.text)
             fresh = True
@@ -222,8 +215,7 @@ class Myt:
             r = requests.get('https://cpb2cs.toyota-europe.com/api/user/{}/cms/trips/v2/{}/events/vin/{}'.format(
                 self.user_data['customerProfile']['uuid'], trip_id, self.config_data['vin']), headers=self.headers)
             if r.status_code != 200:
-                raise ValueError('Failed to get data {} {}'.format(
-                    r.status_code, r.headers))
+                raise ValueError('Failed to get data {} {}'.format(r.status_code, r.headers))
             os.makedirs(trip_path, exist_ok=True)
             self._write_file(trip_file, r.text)
             trip_data = r.json()
@@ -250,11 +242,9 @@ class Myt:
         url = f'https://myt-agg.toyota-europe.com/cma/api/users/{uuid}/vehicle/location'
         r = requests.get(url, headers=headers)
         if r.status_code != 200:
-            raise ValueError('Failed to get data {} {} {}'.format(
-                r.text, r.status_code, r.headers))
+            raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
         os.makedirs(parking_path, exist_ok=True)
-        previous_parking = self._read_file(
-            self._find_latest_file(str(parking_path / 'parking*')))
+        previous_parking = self._read_file(self._find_latest_file(str(parking_path / 'parking*')))
         if r.text != previous_parking:
             self._write_file(parking_file, r.text)
             fresh = True
@@ -272,15 +262,12 @@ class Myt:
         token = self.user_data['token']
         vin = self.config_data['vin']
         headers = {'Cookie': f'iPlanetDirectoryPro={token}'}
-        # (sic)
-        url = f'https://myt-agg.toyota-europe.com/cma/api/vehicle/{vin}/addtionalInfo'
+        url = f'https://myt-agg.toyota-europe.com/cma/api/vehicle/{vin}/addtionalInfo'  # (sic)
         r = requests.get(url, headers=headers)
         if r.status_code != 200:
-            raise ValueError('Failed to get data {} {} {}'.format(
-                r.text, r.status_code, r.headers))
+            raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
         os.makedirs(odometer_path, exist_ok=True)
-        previous_odometer = self._read_file(
-            self._find_latest_file(str(odometer_path / 'odometer*')))
+        previous_odometer = self._read_file(self._find_latest_file(str(odometer_path / 'odometer*')))
         if r.text != previous_odometer:
             self._write_file(odometer_file, r.text)
             fresh = True
@@ -304,18 +291,15 @@ class Myt:
         """
         fresh = False
         remote_control_path = Path(CACHE_DIR) / 'remote_control'
-        remote_control_file = remote_control_path / \
-            'remote_control-{}'.format(pendulum.now())
+        remote_control_file = remote_control_path / 'remote_control-{}'.format(pendulum.now())
         token = self.user_data['token']
         uuid = self.user_data['customerProfile']['uuid']
         vin = self.config_data['vin']
-        headers = {'Cookie': f'iPlanetDirectoryPro={token}',
-                   'uuid': uuid, 'X-TME-LOCALE': 'fi-fi'}
+        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'uuid': uuid, 'X-TME-LOCALE': 'fi-fi'}
         url = f'https://myt-agg.toyota-europe.com/cma/api/vehicles/{vin}/remoteControl/status'
         r = requests.get(url, headers=headers)
         if r.status_code != 200:
-            raise ValueError('Failed to get data {} {} {}'.format(
-                r.text, r.status_code, r.headers))
+            raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
         data = r.json()
         os.makedirs(remote_control_path, exist_ok=True)
 
@@ -327,8 +311,7 @@ class Myt:
             previous_remote_control = None
 
         if data != previous_remote_control:
-            self._write_file(remote_control_file,
-                             json.dumps(r.json(), sort_keys=True))
+            self._write_file(remote_control_file, json.dumps(r.json(), sort_keys=True))
             fresh = True
         return data, fresh
 
@@ -344,8 +327,7 @@ class Myt:
         """
         fresh = False
         statistics_path = Path(CACHE_DIR) / 'statistics'
-        statistics_file = statistics_path / \
-            'statistics-{}'.format(pendulum.now())
+        statistics_file = statistics_path / 'statistics-{}'.format(pendulum.now())
         token = self.user_data['token']
         uuid = self.user_data['customerProfile']['uuid']
         vin = self.config_data['vin']
@@ -355,8 +337,7 @@ class Myt:
         params = {'from': date_from, 'calendarInterval': interval}
         r = requests.get(url, headers=headers, params=params)
         if r.status_code != 200:
-            raise ValueError('Failed to get data {} {} {}'.format(
-                r.text, r.status_code, r.headers))
+            raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
         data = r.json()
         os.makedirs(statistics_path, exist_ok=True)
 
@@ -367,8 +348,7 @@ class Myt:
             previous_statistics = None
 
         if data != previous_statistics:
-            self._write_file(statistics_file, json.dumps(
-                r.json(), sort_keys=True))
+            self._write_file(statistics_file, json.dumps(r.json(), sort_keys=True))
             fresh = True
 
         return data, fresh
@@ -389,27 +369,19 @@ def insert_into_influxdb(measurement, value):
 def remote_control_to_db(myt, fresh, charge_info, hvac_info):
     if fresh and myt.config_data['use_influxdb']:
         log.debug('Saving remote control data to influxdb')
-        insert_into_influxdb(
-            'charge_level', charge_info['ChargeRemainingAmount'])
-        insert_into_influxdb(
-            'ev_range', charge_info['EvDistanceWithAirCoInKm'])
+        insert_into_influxdb('charge_level', charge_info['ChargeRemainingAmount'])
+        insert_into_influxdb('ev_range', charge_info['EvDistanceWithAirCoInKm'])
         insert_into_influxdb('charge_type', charge_info['ChargeType'])
         insert_into_influxdb('charge_week', charge_info['ChargeWeek'])
-        insert_into_influxdb('connector_status',
-                             charge_info['ConnectorStatus'])
-        insert_into_influxdb(
-            'subtraction_rate', charge_info['EvTravelableDistanceSubtractionRate'])
+        insert_into_influxdb('connector_status', charge_info['ConnectorStatus'])
+        insert_into_influxdb('subtraction_rate', charge_info['EvTravelableDistanceSubtractionRate'])
         insert_into_influxdb('plugin_history', charge_info['PlugInHistory'])
         insert_into_influxdb('plugin_status', charge_info['PlugStatus'])
-        insert_into_influxdb(
-            'hv_range', charge_info['GasolineTravelableDistance'])
+        insert_into_influxdb('hv_range', charge_info['GasolineTravelableDistance'])
 
-        insert_into_influxdb('temperature_inside',
-                             hvac_info['InsideTemperature'])
-        insert_into_influxdb('temperature_setting',
-                             hvac_info['SettingTemperature'])
-        insert_into_influxdb('temperature_level',
-                             hvac_info['Temperaturelevel'])
+        insert_into_influxdb('temperature_inside', hvac_info['InsideTemperature'])
+        insert_into_influxdb('temperature_setting', hvac_info['SettingTemperature'])
+        insert_into_influxdb('temperature_level', hvac_info['Temperaturelevel'])
 
 
 def odometer_to_db(myt, fresh, fuel_percent, odometer):
@@ -465,8 +437,7 @@ def main():
     # Get odometer and fuel tank status
     log.info('Get odometer info...')
     odometer, odometer_unit, fuel_percent, fresh = myt.get_odometer_fuel()
-    print('Odometer {} {}, {}% fuel left'.format(
-        odometer, odometer_unit, fuel_percent))
+    print('Odometer {} {}, {}% fuel left'.format(odometer, odometer_unit, fuel_percent))
     odometer_to_db(myt, fresh, fuel_percent, odometer)
 
     # Get remote control status
@@ -483,10 +454,8 @@ def main():
                      in_tz(myt.config_data['timezone']).to_datetime_string()
                      ))
         if charge_info['ChargingStatus'] == 'charging' and charge_info['RemainingChargeTime'] != 65535:
-            acquisition_datetime = pendulum.parse(
-                status['VehicleInfo']['AcquisitionDatetime'])
-            charging_end_time = acquisition_datetime.add(
-                minutes=charge_info['RemainingChargeTime'])
+            acquisition_datetime = pendulum.parse(status['VehicleInfo']['AcquisitionDatetime'])
+            charging_end_time = acquisition_datetime.add(minutes=charge_info['RemainingChargeTime'])
             print('Charging will be completed at {}'.format(charging_end_time.in_tz(myt.config_data['timezone']).
                                                             to_datetime_string()))
         if hvac_info['RemoteHvacMode']:
@@ -494,8 +463,7 @@ def main():
             rear = 'On' if hvac_info['RearDefoggerStatus'] else 'Off'
 
             print('HVAC is on since {}. Remaining heating time {} minutes. Windscreen heating is {}, rear window heating is {}.'.format(
-                pendulum.parse(hvac_info['LatestAcStartTime']).in_tz(
-                    myt.config_data['timezone']).to_datetime_string(),
+                pendulum.parse(hvac_info['LatestAcStartTime']).in_tz(myt.config_data['timezone']).to_datetime_string(),
                 hvac_info['RemainingMinutes'], front, rear))
 
         remote_control_to_db(myt, fresh, charge_info, hvac_info)
@@ -509,10 +477,8 @@ def main():
         fresh_data += fresh
         stats = trip_data['statistics']
         # Parse UTC datetime strings to local time
-        start_time = pendulum.parse(trip['startTimeGmt']).in_tz(
-            myt.config_data['timezone']).to_datetime_string()
-        end_time = pendulum.parse(trip['endTimeGmt']).in_tz(
-            myt.config_data['timezone']).to_datetime_string()
+        start_time = pendulum.parse(trip['startTimeGmt']).in_tz(myt.config_data['timezone']).to_datetime_string()
+        end_time = pendulum.parse(trip['endTimeGmt']).in_tz(myt.config_data['timezone']).to_datetime_string()
         # Remove country part from address strings
         try:
             start = trip['startAddress'].split(',')
@@ -526,16 +492,14 @@ def main():
         end_address = '{},{}'.format(end[0], end[1])
         kms += stats['totalDistanceInKm']
         ls += stats['fuelConsumptionInL']
-        average_consumption = (
-            stats['fuelConsumptionInL']/stats['totalDistanceInKm'])*100
+        average_consumption = (stats['fuelConsumptionInL']/stats['totalDistanceInKm'])*100
         trip_data_to_db(myt, fresh, average_consumption, stats)
         print('{} {} -> {} {}: {} km, {} km/h, {:.2f} l/100 km, {:.2f} l'.
               format(start_time, start_address, end_time, end_address, stats['totalDistanceInKm'],
                      stats['averageSpeedInKmph'], average_consumption, stats['fuelConsumptionInL']))
     if fresh_data and myt.config_data['use_influxdb']:
         insert_into_influxdb('short_term_average_consumption', (ls/kms)*100)
-    print(
-        'Total distance: {:.3f} km, Fuel consumption: {:.2f} l, {:.2f} l/100 km'.format(kms, ls, (ls/kms)*100))
+    print('Total distance: {:.3f} km, Fuel consumption: {:.2f} l, {:.2f} l/100 km'.format(kms, ls, (ls/kms)*100))
 
 
 if __name__ == "__main__":
