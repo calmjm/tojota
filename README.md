@@ -19,7 +19,6 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
 - Data is saved to cache directory for further usage
 
 # Example run
-
 ```
 $ python tojota.py
 2020-10-21 22:10:44,132:__main__:INFO: Fetching trips...
@@ -141,6 +140,7 @@ Total distance: 300.030 km, Fuel consumption: 3.59 l, 1.20 l/100 km
     "to": "2020-05-01"
   }
 }
+
 ```
 
 ## trip.json
@@ -567,7 +567,9 @@ Total distance: 300.030 km, Fuel consumption: 3.59 l, 1.20 l/100 km
     "totalDistanceInKm": 1.477,
     "highwayDistanceInKm": 0,
     "overspeedDistanceInKm": 0,
-    "countriesVisited": ["FI"],
+    "countriesVisited": [
+      "FI"
+    ],
     "hardaccs": 0,
     "hardbrakes": 0,
     "totalDistanceInMiles": 0.92,
@@ -578,9 +580,7 @@ Total distance: 300.030 km, Fuel consumption: 3.59 l, 1.20 l/100 km
 ```
 
 ## parking.json
-
 - address field is not being updated since July 2020. See parking address from latest trip endAddress instead.
-
 ```json
 {
   "event": {
@@ -610,7 +610,6 @@ Total distance: 300.030 km, Fuel consumption: 3.59 l, 1.20 l/100 km
 ```
 
 ## remote_control.json
-
 ```json
 {
   "ReturnCode": "000000",
