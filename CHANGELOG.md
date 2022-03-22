@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.0.7] - 2022-03-22
+
+### Fixed
+
+- Getting odometer information started to require headers X-TME-APP-VERSION and UUID and different authentication.
+- Example app crashed when getting information failed.
+
+### Known issues
+
+- Getting odometer information still fails to "Token provided in the header is invalid". Requires more reverse engineering.
+
 ## [0.0.6] - 2021-10-14
 
 ### Fixed
