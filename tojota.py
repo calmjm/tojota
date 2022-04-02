@@ -227,7 +227,8 @@ class Myt:
         odometer_file = odometer_path / 'odometer-{}'.format(pendulum.now())
         token = self.user_data['token']
         vin = self.config_data['vin']
-        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'X-TME-APP-VERSION': '4.10.0', 'UUID': uuid.uuid4()}
+        uuid = self.user_data['customerProfile']['uuid']
+        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'X-TME-APP-VERSION': '4.10.0', 'UUID': uuid}
         url = f'https://myt-agg.toyota-europe.com/cma/api/vehicle/{vin}/addtionalInfo'  # (sic)
         r = requests.get(url, headers=headers)
         if r.status_code != 200:
