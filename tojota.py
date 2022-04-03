@@ -30,6 +30,9 @@ logging.basicConfig(format='%(asctime)s:%(name)s:%(levelname)s: %(message)s')
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
+# Fake app version mimicking the Android app
+APP_VERSION = '4.10.0'
+
 CACHE_DIR = 'cache'
 USER_DATA = 'user_data.json'
 INFLUXDB_URL = 'http://localhost:8086/write?db=tojota'
@@ -227,7 +230,8 @@ class Myt:
         odometer_file = odometer_path / 'odometer-{}'.format(pendulum.now())
         token = self.user_data['token']
         vin = self.config_data['vin']
-        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'X-TME-APP-VERSION': '4.10.0', 'UUID': uuid.uuid4()}
+        uuid = self.user_data['customerProfile']['uuid']
+        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'X-TME-APP-VERSION': APP_VERSION, 'UUID': uuid}
         url = f'https://myt-agg.toyota-europe.com/cma/api/vehicle/{vin}/addtionalInfo'  # (sic)
         r = requests.get(url, headers=headers)
         if r.status_code != 200:
