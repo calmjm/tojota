@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.8] - 2022-04-03
+
+### Fixed
+
+- Getting odometer information works again, thanks https://github.com/Paxy, https://github.com/calmjm/tojota/issues/37
+
 ## [0.0.7] - 2022-03-22
 
 ### Fixed
