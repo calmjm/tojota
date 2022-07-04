@@ -21,7 +21,6 @@ import os
 from pathlib import Path
 import platform
 import sys
-import uuid
 
 import pendulum
 import requests
@@ -461,8 +460,14 @@ def main():
             end = trip['endAddress'].split(',')
         except KeyError:
             end = ['Unknown', ' Unknown']
-        start_address = '{},{}'.format(start[0], start[1])
-        end_address = '{},{}'.format(end[0], end[1])
+        try:
+            start_address = '{},{}'.format(start[0], start[1])
+        except IndexError:
+            start_address = start[0]
+        try:
+            end_address = '{},{}'.format(end[0], end[1])
+        except IndexError:
+            end_address = end[0]
         kms += stats['totalDistanceInKm']
         ls += stats['fuelConsumptionInL']
         average_consumption = (stats['fuelConsumptionInL']/stats['totalDistanceInKm'])*100
