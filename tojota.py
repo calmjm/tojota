@@ -264,7 +264,7 @@ class Myt:
         token = self.user_data['token']
         uuid = self.user_data['customerProfile']['uuid']
         vin = self.config_data['vin']
-        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'uuid': uuid, 'X-TME-LOCALE': 'fi-fi'}
+        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'uuid': uuid, 'X-TME-LOCALE': 'fi-fi', 'X-TME-BRAND': 'TOYOTA'}
         url = f'https://myt-agg.toyota-europe.com/cma/api/vehicles/{vin}/remoteControl/status'
         r = requests.get(url, headers=headers)
         if r.status_code != 200:
