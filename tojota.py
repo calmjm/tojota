@@ -36,6 +36,16 @@ CACHE_DIR = 'cache'
 USER_DATA = 'user_data.json'
 INFLUXDB_URL = 'http://localhost:8086/write?db=tojota'
 
+KEY_USE_INFLUXDB = "use_influxdb"
+KEY_USE_REMOTE_CONTROL = "use_remote_control"
+CONFIG_KEYS = {
+    "username": True,
+    "password": True,
+    "timezone": False,
+    "vin": True,
+    KEY_USE_INFLUXDB: False,
+    KEY_USE_REMOTE_CONTROL: False
+}
 
 class Myt:
     """
@@ -54,20 +64,45 @@ class Myt:
             self.login()
 
     @staticmethod
-    def _get_config(config_file='myt.json'):
-        """
-        Load configuration values from config file. Return config as a dict.
-        :param config_file: Filename on configs directory
-        :return: dict
-        """
-        with open(Path('configs')/config_file) as f:
-            try:
-                config_data = json.load(f)
-            except Exception as e:  # pylint: disable=W0703
-                log.error('Failed to load configuration JSON! %s', str(e))
-                raise
-        return config_data
+    def _get_environment_or_filedata(file_data, file_key, env_key):
+        if (file_data is None or file_data.get(file_key) is None):
+            log.debug('Reading %s from environment', file_key)
+            return os.getenv(env_key)
+        else:
+            log.debug('Reading %s from file', file_key)
+            return file_data.get(file_key)
 
+    @staticmethod
+    def _get_config(config_file='myt.json'):
+        # see if we can find file
+        file_data = None
+        try:
+            with open(Path('configs')/config_file) as f:
+                file_data = json.load(f)
+        except (FileNotFoundError):
+            print("Unable to read %s", config_file)
+
+        # populate dictionary
+        config_data = {
+            KEY_USE_REMOTE_CONTROL: False,
+            KEY_USE_INFLUXDB: False
+        }
+        for x in CONFIG_KEYS.keys():
+            value = Myt._get_environment_or_filedata(
+                file_data, x, "TOJOTA_" + x.upper())
+
+            # if required ensure we have it
+            if value is None and CONFIG_KEYS.get(x):
+                raise Exception("Missing required configuration key " + x)
+            elif value is None:
+                continue
+            config_data.update({
+                x: value
+            })
+            log.debug('Read %s', x)
+
+        return config_data
+    
     @staticmethod
     def _get_user_data():
         """

@@ -11,7 +11,7 @@ https://play.google.com/store/apps/details?id=app.mytoyota.toyota.com.mytoyota
 
 # Usage
 
-- Configure your MyT user account, password and vehicle VIN into `configs/myt.json`
+- Configure your MyT user account, password and vehicle VIN into `configs/myt.json` or export environment variables by prefixing `TOJOTA_` i.e. `TOJOTA_USERNAME`, `TOJOTA_PASSWORD`, `TOJOTA_VIN`etc.
 - If your vehicle doesn't support remote control functions, set "use_remote_control": false in the config file
 - If you would like to save data to InfluxDB, install InfluxDB ( https://www.influxdata.com/ ) and create database
   'tojota' and set "use_influxdb": true in the config file
