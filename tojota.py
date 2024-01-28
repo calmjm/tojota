@@ -21,6 +21,7 @@ import os
 from pathlib import Path
 import platform
 import sys
+from urllib.parse import parse_qs, urlparse
 
 import pendulum
 import requests
@@ -130,6 +131,8 @@ class Myt:
         :return: None
         """
         login_url = 'https://b2c-login.toyota-europe.com/json/realms/root/realms/tme/authenticate?authIndexType=service&authIndexValue=oneapp'
+        authorize_url = 'https://b2c-login.toyota-europe.com/oauth2/realms/root/realms/tme/authorize?client_id=oneapp&scope=openid+profile+write&response_type=code&redirect_uri=com.toyota.oneapp:/oauth2Callback&code_challenge=plain&code_challenge_method=plain'
+        token_url = 'https://b2c-login.toyota-europe.com/oauth2/realms/root/realms/tme/access_token'
 
         login_headers = {'Content-Type': 'application/json'}
         log.info('Get initial auth_id...')
@@ -145,12 +148,30 @@ class Myt:
             data['callbacks'][0]['input'][0]['value'] = self.config_data['password']
         except KeyError:
             raise ValueError('Login failed, check your username! {}'.format(data['callbacks'][0]['output'][0]['value']))
-        log.info('Get token...')
+        log.info('Get login token...')
         r = requests.post(login_url, headers=login_headers, data=json.dumps(data))
         if r.status_code != 200:
             raise ValueError('Login failed, check your password! {}'.format(r.text))
-        user_data = r.json()
+        data = r.json()
 
+        log.info('Authorizing...')
+        headers = {'cookie': f"iPlanetDirectoryPro={data['tokenId']}"}
+        r = requests.get(authorize_url, headers=headers, allow_redirects=False)
+        authentication_code = parse_qs(urlparse(r.headers['Location']).query)['code'][0]
+
+        log.info('Get access tokens...')
+        headers = {"authorization": "basic b25lYXBwOm9uZWFwcA=="}  # oneapp:oneapp
+        data = {
+            "client_id": "oneapp",
+            "code": authentication_code,
+            "redirect_uri": "com.toyota.oneapp:/oauth2Callback",
+            "grant_type": "authorization_code",
+            "code_verifier": "plain",
+        }
+        r = requests.post(token_url, headers=headers, data=data, allow_redirects=False)
+        if not r.ok:
+            raise ValueError('Getting authorization tokens failed! {}'.format(r.text))
+        user_data = r.json()
         self.user_data = user_data
         self._write_file(Path(CACHE_DIR) / USER_DATA, r.text)
 
