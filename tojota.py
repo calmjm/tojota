@@ -123,22 +123,35 @@ class Myt:
             return max(files, key=os.path.getctime)
         return None
 
-    def login(self, locale='fi-fi'):
+    def login(self):
         """
-        Do Toyota SSO login. Saves user data for configured account in self.user_data and sets token to self.headers.
+        Do Toyota SSO login. Saves user data for configured account in self.user_data
         User data is saved to CACHE_DIR for reuse.
-        :param locale: Locale for login is required but doesn't seem to have any effect
         :return: None
         """
-        login_headers = {'X-TME-BRAND': 'TOYOTA', 'X-TME-LC': locale, 'Accept': 'application/json, text/plain, */*',
-                         'Sec-Fetch-Dest': 'empty'}
-        log.info('Logging in...')
-        r = requests.post('https://ssoms.toyota-europe.com/authenticate', headers=login_headers, json=self.config_data)
+        login_url = 'https://b2c-login.toyota-europe.com/json/realms/root/realms/tme/authenticate?authIndexType=service&authIndexValue=oneapp'
+
+        login_headers = {'Content-Type': 'application/json'}
+        log.info('Get initial auth_id...')
+        r = requests.post(login_url, headers=login_headers)
+        log.info('Get username prompt...')
+        r = requests.post(login_url, headers=login_headers, data=r.text)
+        data = r.json()
+        data['callbacks'][0]['input'][0]['value'] = self.config_data['username']
+        log.info('Get password prompt...')
+        r = requests.post(login_url, headers=login_headers, data=json.dumps(data))
+        data = r.json()
+        try:
+            data['callbacks'][0]['input'][0]['value'] = self.config_data['password']
+        except KeyError:
+            raise ValueError('Login failed, check your username! {}'.format(data['callbacks'][0]['output'][0]['value']))
+        log.info('Get token...')
+        r = requests.post(login_url, headers=login_headers, data=json.dumps(data))
         if r.status_code != 200:
-            raise ValueError('Login failed, check your credentials! {}'.format(r.text))
+            raise ValueError('Login failed, check your password! {}'.format(r.text))
         user_data = r.json()
+
         self.user_data = user_data
-        self.headers = {'X-TME-TOKEN': user_data['token']}
         self._write_file(Path(CACHE_DIR) / USER_DATA, r.text)
 
     def get_trips(self, trip=1):
