@@ -40,21 +40,27 @@ INFLUXDB_URL = 'http://localhost:8086/write?db=tojota'
 
 MYT_API_URL = 'https://ctpa-oneapi.tceu-ctp-prd.toyotaconnectedeurope.io'
 
+
 class Myt:
     """
     Class for interacting with Toyota vehicle API
     """
     def __init__(self):
         """
-        Create cache directory, try to load existing user data or if it doesn't exists do login.
+        Create cache directory, try to load existing user data or if it doesn't exist do login.
         """
         os.makedirs(CACHE_DIR, exist_ok=True)
         self.config_data = self._get_config()
         self.user_data = self._get_user_data()
-        if self.user_data:
-            self.headers = {'X-TME-TOKEN': self.user_data['token'], 'X-TME-LOCALE': 'fi-fi'}
-        else:
+        if not self.user_data or pendulum.now() > pendulum.parse(self.user_data['expiration']):
             self.login()
+
+        self.headers = {
+            'Authorization': f'Bearer {self.user_data["access_token"]}',
+            'x-api-key': 'tTZipv6liF74PwMfk9Ed68AQ0bISswwf3iHQdqcF',  # Found from the intternets
+            'x-guid': self.user_data['uuid'],
+            'vin': self.config_data['vin'],
+        }
 
     @staticmethod
     def _get_config(config_file='myt.json'):
@@ -136,43 +142,57 @@ class Myt:
         authorize_url = 'https://b2c-login.toyota-europe.com/oauth2/realms/root/realms/tme/authorize?client_id=oneapp&scope=openid+profile+write&response_type=code&redirect_uri=com.toyota.oneapp:/oauth2Callback&code_challenge=plain&code_challenge_method=plain'
         token_url = 'https://b2c-login.toyota-europe.com/oauth2/realms/root/realms/tme/access_token'
 
-        login_headers = {'Content-Type': 'application/json'}
-        log.info('Get initial auth_id...')
-        r = requests.post(login_url, headers=login_headers)
-        log.info('Get username prompt...')
-        r = requests.post(login_url, headers=login_headers, data=r.text)
-        data = r.json()
-        data['callbacks'][0]['input'][0]['value'] = self.config_data['username']
-        log.info('Get password prompt...')
-        r = requests.post(login_url, headers=login_headers, data=json.dumps(data))
-        data = r.json()
-        try:
-            data['callbacks'][0]['input'][0]['value'] = self.config_data['password']
-        except KeyError:
-            raise ValueError('Login failed, check your username! {}'.format(data['callbacks'][0]['output'][0]['value']))
-        log.info('Get login token...')
-        r = requests.post(login_url, headers=login_headers, data=json.dumps(data))
-        if r.status_code != 200:
-            raise ValueError('Login failed, check your password! {}'.format(r.text))
-        data = r.json()
+        if "refresh_token" not in self.user_data:
+            login_headers = {'Content-Type': 'application/json'}
+            log.info('Get initial auth_id...')
+            r = requests.post(login_url, headers=login_headers)
+            log.info('Get username prompt...')
+            r = requests.post(login_url, headers=login_headers, data=r.text)
+            data = r.json()
+            data['callbacks'][0]['input'][0]['value'] = self.config_data['username']
+            log.info('Get password prompt...')
+            r = requests.post(login_url, headers=login_headers, data=json.dumps(data))
+            data = r.json()
+            try:
+                data['callbacks'][0]['input'][0]['value'] = self.config_data['password']
+            except KeyError:
+                raise ValueError('Login failed, check your username! {}'.format(data['callbacks'][0]['output'][0]['value']))
+            log.info('Get login token...')
+            r = requests.post(login_url, headers=login_headers, data=json.dumps(data))
+            if r.status_code != 200:
+                raise ValueError('Login failed, check your password! {}'.format(r.text))
+            data = r.json()
 
-        log.info('Authorizing...')
-        headers = {'cookie': f"iPlanetDirectoryPro={data['tokenId']}"}
-        r = requests.get(authorize_url, headers=headers, allow_redirects=False)
-        authentication_code = parse_qs(urlparse(r.headers['Location']).query)['code'][0]
+            log.info('Authorizing...')
+            headers = {'cookie': f"iPlanetDirectoryPro={data['tokenId']}"}
+            r = requests.get(authorize_url, headers=headers, allow_redirects=False)
+            authentication_code = parse_qs(urlparse(r.headers['Location']).query)['code'][0]
 
-        log.info('Get access tokens...')
-        headers = {"authorization": "basic b25lYXBwOm9uZWFwcA=="}  # oneapp:oneapp
-        data = {
-            "client_id": "oneapp",
-            "code": authentication_code,
-            "redirect_uri": "com.toyota.oneapp:/oauth2Callback",
-            "grant_type": "authorization_code",
-            "code_verifier": "plain",
-        }
-        r = requests.post(token_url, headers=headers, data=data, allow_redirects=False)
-        if not r.ok:
-            raise ValueError('Getting authorization tokens failed! {}'.format(r.text))
+            log.info('Get access tokens...')
+            headers = {"authorization": "basic b25lYXBwOm9uZWFwcA=="}  # oneapp:oneapp
+            data = {
+                'client_id': 'oneapp',
+                'code': authentication_code,
+                'redirect_uri': 'com.toyota.oneapp:/oauth2Callback',
+                'grant_type': 'authorization_code',
+                'code_verifier': 'plain',
+            }
+            r = requests.post(token_url, headers=headers, data=data, allow_redirects=False)
+            if not r.ok:
+                raise ValueError('Getting authorization tokens failed! {}'.format(r.text))
+        else:
+            log.info('Using refresh token...')
+            headers = {"authorization": "basic b25lYXBwOm9uZWFwcA=="}  # oneapp:oneapp
+            data = {
+                'client_id': 'oneapp',
+                'refresh_token': self.user_data['refresh_token'],
+                'redirect_uri': 'com.toyota.oneapp:/oauth2Callback',
+                'grant_type': 'refresh_token',
+                'code_verifier': 'plain',
+            }
+            r = requests.post(token_url, headers=headers, data=data, allow_redirects=False)
+            if not r.ok:
+                raise ValueError('Getting authorization tokens using refresh token failed! {}'.format(r.text))
 
         user_data = r.json()
         user_data['uuid'] = jwt.decode(
@@ -248,12 +268,8 @@ class Myt:
         fresh = False
         parking_path = Path(CACHE_DIR) / 'parking'
         parking_file = parking_path / 'parking-{}'.format(pendulum.now())
-        token = self.user_data['token']
-        uuid = self.user_data['customerProfile']['uuid']
-        vin = self.config_data['vin']
-        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'VIN': vin}
-        url = f'https://myt-agg.toyota-europe.com/cma/api/users/{uuid}/vehicle/location'
-        r = requests.get(url, headers=headers)
+        url = f'{MYT_API_URL}/v1/location'
+        r = requests.get(url, headers=self.headers)
         if r.status_code != 200:
             raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
         os.makedirs(parking_path, exist_ok=True)
@@ -419,6 +435,7 @@ def main():
     """
     myt = Myt()
 
+    """
     # Try to fetch trips array with existing user_info. If it fails, do new login and try again.
     try:
         trips, fresh = myt.get_trips()
@@ -430,23 +447,14 @@ def main():
         latest_address = trips['recentTrips'][0]['endAddress']
     except (KeyError, IndexError):
         latest_address = 'Unknown address'
+    """
 
-    # Check is vehicle is still parked or moving and print corresponding information. Parking timestamp is epoch
-    # timestamp with microseconds. Actual value seems to be at second precision level.
     log.info('Get parking info...')
-    try:
-        parking, fresh = myt.get_parking()
-        if parking['tripStatus'] == '0':
-            print('Car is parked at {} at {}'.format(latest_address,
-                                                     pendulum.from_timestamp(int(parking['event']['timestamp']) / 1000).
-                                                     in_tz(myt.config_data['timezone']).to_datetime_string()))
-        else:
-            print('Car left from {} parked at {}'.format(latest_address,
-                                                         pendulum.from_timestamp(int(parking['event']['timestamp']) /
-                                                                                 1000).
-                                                         in_tz(myt.config_data['timezone']).to_datetime_string()))
-    except ValueError:
-        print('Didn\'t get parking information!')
+    parking, fresh = myt.get_parking()
+    latitude = parking['payload']['vehicleLocation']['latitude']
+    longitude = parking['payload']['vehicleLocation']['longitude']
+    parking_date = pendulum.parse(parking['payload']['lastTimestamp']).in_tz(myt.config_data['timezone']).to_datetime_string()
+    print('Car was parked at {} {} at {}'.format(latitude, longitude, parking_date))
 
     # Get odometer and fuel tank status
     log.info('Get odometer info...')
