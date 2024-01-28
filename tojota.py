@@ -23,6 +23,7 @@ import platform
 import sys
 from urllib.parse import parse_qs, urlparse
 
+import jwt
 import pendulum
 import requests
 
@@ -37,6 +38,7 @@ CACHE_DIR = 'cache'
 USER_DATA = 'user_data.json'
 INFLUXDB_URL = 'http://localhost:8086/write?db=tojota'
 
+MYT_API_URL = 'https://ctpa-oneapi.tceu-ctp-prd.toyotaconnectedeurope.io'
 
 class Myt:
     """
@@ -171,9 +173,18 @@ class Myt:
         r = requests.post(token_url, headers=headers, data=data, allow_redirects=False)
         if not r.ok:
             raise ValueError('Getting authorization tokens failed! {}'.format(r.text))
+
         user_data = r.json()
+        user_data['uuid'] = jwt.decode(
+            user_data['id_token'],
+            algorithms=['RS256'],
+            options={'verify_signature': False},
+            audience='oneappsdkclient',
+        )['uuid']
+        user_data['expiration'] = str(pendulum.now().add(seconds=user_data['expires_in']))
+
         self.user_data = user_data
-        self._write_file(Path(CACHE_DIR) / USER_DATA, r.text)
+        self._write_file(Path(CACHE_DIR) / USER_DATA, json.dumps(user_data))
 
     def get_trips(self, trip=1):
         """
