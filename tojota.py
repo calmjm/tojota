@@ -59,7 +59,9 @@ class Myt:
             'Authorization': f'Bearer {self.user_data["access_token"]}',
             'x-api-key': 'tTZipv6liF74PwMfk9Ed68AQ0bISswwf3iHQdqcF',  # Found from the intternets
             'x-guid': self.user_data['uuid'],
+            'guid': self.user_data['uuid'],
             'vin': self.config_data['vin'],
+            "x-brand": "T",
         }
 
     @staticmethod
@@ -279,21 +281,18 @@ class Myt:
             fresh = True
         return r.json(), fresh
 
-    def get_odometer_fuel(self):
+    def get_telemetry(self):
         """
-        Get mileage and fuel tank information. Data is saved when vehicle is powered off. Save data to
+        Get mileage and range information. Data is saved when vehicle is powered off. Save data to
         CACHE_DIR/odometer/odometer-`datetime` file.
-        :return: list(odometer, odometer_unit, fuel_percentage, fresh)
+        :return: dict(odometer, hv_percentage, hv_range, ev_percentage, timestamp, charging_status), fresh
         """
         fresh = False
         odometer_path = Path(CACHE_DIR) / 'odometer'
         odometer_file = odometer_path / 'odometer-{}'.format(pendulum.now())
-        token = self.user_data['token']
-        vin = self.config_data['vin']
-        uuid = self.user_data['customerProfile']['uuid']
-        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'X-TME-APP-VERSION': APP_VERSION, 'UUID': uuid}
-        url = f'https://myt-agg.toyota-europe.com/cma/api/vehicle/{vin}/addtionalInfo'  # (sic)
-        r = requests.get(url, headers=headers)
+        url = f'{MYT_API_URL}/v3/telemetry'
+        r = requests.get(url, headers=self.headers)
+
         if r.status_code != 200:
             raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
         os.makedirs(odometer_path, exist_ok=True)
@@ -301,17 +300,16 @@ class Myt:
         if r.text != previous_odometer:
             self._write_file(odometer_file, r.text)
             fresh = True
-        data = r.json()
-        odometer = 0
-        odometer_unit = ''
-        fuel = 0
-        for item in data:
-            if item['type'] == 'mileage':
-                odometer = item['value']
-                odometer_unit = item['unit']
-            if item['type'] == 'Fuel':
-                fuel = item['value']
-        return odometer, odometer_unit, fuel, fresh
+        data = r.json()['payload']
+        telemetry = {
+            'odometer': data['odometer']['value'],
+            'hv_percentage': data['fuelLevel'],
+            'hv_range': data['distanceToEmpty']['value'],
+            'ev_percentage': data['batteryLevel'],
+            'timestamp': data['timestamp'],
+            'charging_status': data['chargingStatus'],
+        }
+        return telemetry, fresh
 
     def get_remote_control_status(self):
         """
@@ -459,9 +457,11 @@ def main():
     # Get odometer and fuel tank status
     log.info('Get odometer info...')
     try:
-        odometer, odometer_unit, fuel_percent, fresh = myt.get_odometer_fuel()
-        print('Odometer {} {}, {}% fuel left'.format(odometer, odometer_unit, fuel_percent))
-        odometer_to_db(myt, fresh, fuel_percent, odometer)
+        telemetry, fresh = myt.get_telemetry()
+        print('Odometer {} km, {}% fuel left'.format(telemetry['odometer'], telemetry['hv_percentage']))
+        print('EV {}%, status: {} at {}'.format(telemetry['ev_percentage'], telemetry['charging_status'],
+                                                pendulum.parse(telemetry['timestamp']).in_tz(myt.config_data['timezone']).to_datetime_string()))
+        #odometer_to_db(myt, fresh, fuel_percent, odometer)
     except ValueError:
         print('Didn\'t get odometer information!')
 
