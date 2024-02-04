@@ -208,21 +208,31 @@ class Myt:
         self.user_data = user_data
         self._write_file(Path(CACHE_DIR) / USER_DATA, json.dumps(user_data))
 
-    def get_trips(self, trip=1):
+    def get_trips(self, from_date=None, to_date=None, route=False, summary=True, limit=50, offset=0):
         """
         Get latest 10 trips. Save trips to CACHE_DIR/trips/trips-`datetime` file. Will save every time there is a new
         trip or daily because of changing metadata if no new trips. Saved information is not currently used for
         anything.
-        :param trip: There is paging, but it doesn't seem to do anything. 1 is the default value.
-        :return: recentTrips dict, fresh boolean True is new data was fetched
+        :param from_date: start date
+        :param to_date: end date
+        :param route: Get route location points
+        :param summary: Include summary data
+        :param limit: Limit trip count. Max 50 with routes, max 1000 without routes
+        :param offset: Pagination offset
+        :return: recentTrips dict, fresh boolean True if different data was fetched than previously
         """
         fresh = False
         trips_path = Path(CACHE_DIR) / 'trips'
         trips_file = trips_path / 'trips-{}'.format(pendulum.now())
         log.info('Fetching trips...')
+        if not to_date:
+            to_date = pendulum.now().to_date_string()
+        if not from_date:
+            from_date = pendulum.now().add(weeks=-1).to_date_string()
         r = requests.get(
-            'https://cpb2cs.toyota-europe.com/api/user/{}/cms/trips/v2/history/vin/{}/{}'.format(
-                self.user_data['customerProfile']['uuid'], self.config_data['vin'], trip), headers=self.headers)
+            f'{MYT_API_URL}/v1/trips?from={from_date}&to={to_date}&route={route}&summary={summary}&limit={limit}&offset={offset}',
+            headers=self.headers)
+        log.error(r.text)
         if r.status_code != 200:
             raise ValueError('Failed to get data, Status: {} Headers: {} Body: {}'.format(r.status_code, r.headers,
                                                                                           r.text))
@@ -320,12 +330,8 @@ class Myt:
         fresh = False
         remote_control_path = Path(CACHE_DIR) / 'remote_control'
         remote_control_file = remote_control_path / 'remote_control-{}'.format(pendulum.now())
-        token = self.user_data['token']
-        uuid = self.user_data['customerProfile']['uuid']
-        vin = self.config_data['vin']
-        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'uuid': uuid, 'X-TME-LOCALE': 'fi-fi'}
-        url = f'https://myt-agg.toyota-europe.com/cma/api/vehicles/{vin}/remoteControl/status'
-        r = requests.get(url, headers=headers)
+        url = f'{MYT_API_URL}/v1/global/remote/electric/status'
+        r = requests.get(url, headers=self.headers)
         if r.status_code != 200:
             raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
         data = r.json()
@@ -433,20 +439,6 @@ def main():
     """
     myt = Myt()
 
-    """
-    # Try to fetch trips array with existing user_info. If it fails, do new login and try again.
-    try:
-        trips, fresh = myt.get_trips()
-    except ValueError:
-        log.info('Failed to use cached token, doing fresh login...')
-        myt.login()
-        trips, fresh = myt.get_trips()
-    try:
-        latest_address = trips['recentTrips'][0]['endAddress']
-    except (KeyError, IndexError):
-        latest_address = 'Unknown address'
-    """
-
     log.info('Get parking info...')
     parking, fresh = myt.get_parking()
     latitude = parking['payload']['vehicleLocation']['latitude']
@@ -469,30 +461,27 @@ def main():
     if myt.config_data['use_remote_control']:
         log.info('Get remote control status...')
         status, fresh = myt.get_remote_control_status()
-        charge_info = status['VehicleInfo']['ChargeInfo']
-        hvac_info = status['VehicleInfo']['RemoteHvacInfo']
-        print('Battery level {}%, EV range {} km, HV range {} km, Inside temperature {}, Charging status {}, status reported at {}'.
-              format(charge_info['ChargeRemainingAmount'], charge_info['EvDistanceWithAirCoInKm'],
-                     charge_info['GasolineTravelableDistance'],
-                     hvac_info['InsideTemperature'], charge_info['ChargingStatus'],
-                     pendulum.parse(status['VehicleInfo']['AcquisitionDatetime']).
+
+        data = status['payload']
+        print('Battery level {}%, EV range {} km, Fuel level {}%, HV range {} km, Charging status {}, status reported at {}'.
+              format(data['batteryLevel'], data['evRangeWithAc']['value'],
+                     data['fuelLevel'], data['fuelRange']['value'],
+                     data['chargingStatus'],
+                     pendulum.parse(data['lastUpdateTimestamp']).
                      in_tz(myt.config_data['timezone']).to_datetime_string()
                      ))
-        if charge_info['ChargingStatus'] == 'charging' and charge_info['RemainingChargeTime'] != 65535:
-            acquisition_datetime = pendulum.parse(status['VehicleInfo']['AcquisitionDatetime'])
-            charging_end_time = acquisition_datetime.add(minutes=charge_info['RemainingChargeTime'])
+        if data['chargingStatus'] == 'charging' and data['remainingChargeTime'] != 65535:
+            acquisition_datetime = pendulum.parse(data['lastUpdateTimestamp'])
+            charging_end_time = acquisition_datetime.add(minutes=data['remainingChargeTime'])
             print('Charging will be completed at {}'.format(charging_end_time.in_tz(myt.config_data['timezone']).
                                                             to_datetime_string()))
-        if hvac_info['RemoteHvacMode']:
-            front = 'On' if hvac_info['FrontDefoggerStatus'] else 'Off'
-            rear = 'On' if hvac_info['RearDefoggerStatus'] else 'Off'
+        else:
+            print('Pulling power from the plug but not really charging')
 
-            print('HVAC is on since {}. Remaining heating time {} minutes. Windscreen heating is {}, rear window heating is {}.'.format(
-                pendulum.parse(hvac_info['LatestAcStartTime']).in_tz(myt.config_data['timezone']).to_datetime_string(),
-                hvac_info['RemainingMinutes'], front, rear))
+        #remote_control_to_db(myt, fresh, charge_info, hvac_info)
 
-        remote_control_to_db(myt, fresh, charge_info, hvac_info)
-
+    log.info('Get trips...')
+    trips, fresh = myt.get_trips()
     # Get detailed information about trips and calculate cumulative kilometers and fuel liters
     kms = 0
     ls = 0
