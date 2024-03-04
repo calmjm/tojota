@@ -31,9 +31,6 @@ logging.basicConfig(format='%(asctime)s:%(name)s:%(levelname)s: %(message)s')
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-# Fake app version mimicking the Android app
-APP_VERSION = '4.10.0'
-
 CACHE_DIR = 'cache'
 USER_DATA = 'user_data.json'
 INFLUXDB_URL = 'http://localhost:8086/write?db=tojota'
@@ -94,7 +91,7 @@ class Myt:
                     raise
             return user_data
         except FileNotFoundError:
-            return None
+            return []
 
     @staticmethod
     def _read_file(file_path):
@@ -509,7 +506,7 @@ def main():
         print('Odometer {} km, {}% fuel left'.format(telemetry['odometer'], telemetry['hv_percentage']))
         print('EV {}%, status: {} at {}'.format(telemetry['ev_percentage'], telemetry['charging_status'],
                                                 pendulum.parse(telemetry['timestamp']).in_tz(myt.config_data['timezone']).to_datetime_string()))
-        odometer_to_db(myt, fresh, telemetry['hv_percentage'], telemetry['hv_percentage'])
+        odometer_to_db(myt, fresh, telemetry['hv_percentage'], telemetry['odometer'])
     except ValueError:
         print('Didn\'t get odometer information!')
 
