@@ -232,7 +232,6 @@ class Myt:
         r = requests.get(
             f'{MYT_API_URL}/v1/trips?from={from_date}&to={to_date}&route={route}&summary={summary}&limit={limit}&offset={offset}',
             headers=self.headers)
-        log.error(r.text)
         if r.status_code != 200:
             raise ValueError('Failed to get data, Status: {} Headers: {} Body: {}'.format(r.status_code, r.headers,
                                                                                           r.text))
@@ -244,10 +243,11 @@ class Myt:
         trips = r.json()
         return trips, fresh
 
-    def get_trip(self, trip_id):
+    def get_trip(self, trips, trip_id):
         """
         Get trip info. Trip is identified by uuidv4. Save trip data to CACHE_DIR/trips/[12]/[34]/uuid file. If given
         trip already exists in CACHE_DIR just get it from there.
+        :param trips: trips data structure
         :param trip_id: tripId to fetch. uuid v4 that is received from get_trips().
         :return: trip dict, fresh boolean True is new data was fetched
         """
@@ -257,13 +257,15 @@ class Myt:
         trip_file = trip_path / trip_id
         if not trip_file.exists():
             log.debug('Fetching trip...')
-            r = requests.get('https://cpb2cs.toyota-europe.com/api/user/{}/cms/trips/v2/{}/events/vin/{}'.format(
-                self.user_data['customerProfile']['uuid'], trip_id, self.config_data['vin']), headers=self.headers)
-            if r.status_code != 200:
-                raise ValueError('Failed to get data {} {}'.format(r.status_code, r.headers))
+            for trip in trips:
+                if trip['id'] == trip_id:
+                    trip_data = trip
+                    break
+            else:
+                raise ValueError('Failed to find the trip!')
+
             os.makedirs(trip_path, exist_ok=True)
-            self._write_file(trip_file, r.text)
-            trip_data = r.json()
+            self._write_file(trip_file, json.dumps(trip_data))
             fresh = True
         else:
             with open(trip_file, encoding='utf-8') as f:
@@ -351,6 +353,8 @@ class Myt:
 
     def get_driving_statistics(self, date_from=None, interval='day', locale='fi-fi'):
         """
+        OBSOLETE!
+
         Get driving statistics information. Save data to
         CACHE_DIR/statistics/statistics-`datetime` file.
 
@@ -401,6 +405,7 @@ def insert_into_influxdb(measurement, value):
 
 
 def remote_control_to_db(myt, fresh, charge_info, hvac_info):
+    # OBSOLETE!
     if fresh and myt.config_data['use_influxdb']:
         log.debug('Saving remote control data to influxdb')
         insert_into_influxdb('charge_level', charge_info['ChargeRemainingAmount'])
@@ -418,6 +423,15 @@ def remote_control_to_db(myt, fresh, charge_info, hvac_info):
         insert_into_influxdb('temperature_level', hvac_info['Temperaturelevel'])
 
 
+def ev_data_to_db(myt, fresh, data):
+    if fresh and myt.config_data['use_influxdb']:
+        log.debug('Saving EV data to influxdb')
+        insert_into_influxdb('charge_level', data['batteryLevel'])
+        insert_into_influxdb('ev_range', data['evRangeWithAc']['value'])
+        insert_into_influxdb('hv_level', data['fuelLevel'])
+        insert_into_influxdb('hv_range', data['fuelRange']['value'])
+
+
 def odometer_to_db(myt, fresh, fuel_percent, odometer):
     if fresh and myt.config_data['use_influxdb']:
         log.debug('Saving odometer data to influxdb')
@@ -425,16 +439,58 @@ def odometer_to_db(myt, fresh, fuel_percent, odometer):
         insert_into_influxdb('fuel_level', fuel_percent)
 
 
-def trip_data_to_db(myt, fresh, average_consumption, stats):
+def trip_data_to_db(myt, fresh, average_consumption, kms, liters):
     if fresh and myt.config_data['use_influxdb']:
-        insert_into_influxdb('trip_kilometers', stats['totalDistanceInKm'])
-        insert_into_influxdb('trip_liters', stats['fuelConsumptionInL'])
+        insert_into_influxdb('trip_kilometers', kms)
+        insert_into_influxdb('trip_liters', liters)
         insert_into_influxdb('trip_average_consumption', average_consumption)
+
+
+def print_trip_stats(trip):
+    duration = trip['summary']['duration']
+    length = trip['summary']['length']
+
+    try:
+        ev_time = trip['hdc']['evTime'] / duration * 100
+    except KeyError:
+        ev_time = 0
+    try:
+        eco_time = trip['hdc']['ecoTime'] / duration * 100
+    except KeyError:
+        eco_time = 0
+    try:
+        power_time = trip['hdc']['powerTime'] / duration * 100
+    except KeyError:
+        power_time = 0
+    try:
+        charge_time = trip['hdc']['chargeTime'] / duration * 100
+    except KeyError:
+        charge_time = 0
+    try:
+        ev_dist = trip['hdc']['evDistance'] / length * 100
+    except KeyError:
+        ev_dist = 0
+    try:
+        eco_dist = trip['hdc']['ecoDist'] / length * 100
+    except KeyError:
+        eco_dist = 0
+    try:
+        power_dist = trip['hdc']['powerDist'] / length * 100
+    except KeyError:
+        power_dist = 0
+    try:
+        charge_dist = trip['hdc']['chargeDist'] / length * 100
+    except KeyError:
+        charge_dist = 0
+    print('Time stats:       EV: {:.0f}%\teco: {:.0f}%\tpower: {:.0f}%\tcharging: {:.0f}%'.
+          format(ev_time, eco_time, power_time, charge_time))
+    print('Distance stats:   EV: {:.0f}%\teco: {:.0f}%\tpower: {:.0f}%\tcharging: {:.0f}%'.
+          format(ev_dist, eco_dist, power_dist, charge_dist))
 
 
 def main():
     """
-    Get trips, get parking information, get trips information
+    Get parking information, get odometer information, get remote control information, get trips information
     :return:
     """
     myt = Myt()
@@ -453,7 +509,7 @@ def main():
         print('Odometer {} km, {}% fuel left'.format(telemetry['odometer'], telemetry['hv_percentage']))
         print('EV {}%, status: {} at {}'.format(telemetry['ev_percentage'], telemetry['charging_status'],
                                                 pendulum.parse(telemetry['timestamp']).in_tz(myt.config_data['timezone']).to_datetime_string()))
-        #odometer_to_db(myt, fresh, fuel_percent, odometer)
+        odometer_to_db(myt, fresh, telemetry['hv_percentage'], telemetry['hv_percentage'])
     except ValueError:
         print('Didn\'t get odometer information!')
 
@@ -475,10 +531,10 @@ def main():
             charging_end_time = acquisition_datetime.add(minutes=data['remainingChargeTime'])
             print('Charging will be completed at {}'.format(charging_end_time.in_tz(myt.config_data['timezone']).
                                                             to_datetime_string()))
-        else:
+        if data['chargingStatus'] == 'charging' and data['remainingChargeTime'] == 65535:
             print('Pulling power from the plug but not really charging')
-
-        #remote_control_to_db(myt, fresh, charge_info, hvac_info)
+        ev_data_to_db(myt, fresh, data)
+        # remote_control_to_db(myt, fresh, charge_info, hvac_info)
 
     log.info('Get trips...')
     trips, fresh = myt.get_trips()
@@ -486,37 +542,25 @@ def main():
     kms = 0
     ls = 0
     fresh_data = 0
-    for trip in trips['recentTrips']:
-        trip_data, fresh = myt.get_trip(trip['tripId'])
+    for trip in trips['payload']['trips']:
+        trip_data, fresh = myt.get_trip(trips['payload']['trips'], trip['id'])
         fresh_data += fresh
-        stats = trip_data['statistics']
         # Parse UTC datetime strings to local time
-        start_time = pendulum.parse(trip['startTimeGmt']).in_tz(myt.config_data['timezone']).to_datetime_string()
-        end_time = pendulum.parse(trip['endTimeGmt']).in_tz(myt.config_data['timezone']).to_datetime_string()
-        # Remove country part from address strings
-        try:
-            start = trip['startAddress'].split(',')
-        except KeyError:
-            start = ['Unknown', ' Unknown']
-        try:
-            end = trip['endAddress'].split(',')
-        except KeyError:
-            end = ['Unknown', ' Unknown']
-        try:
-            start_address = '{},{}'.format(start[0], start[1])
-        except IndexError:
-            start_address = start[0]
-        try:
-            end_address = '{},{}'.format(end[0], end[1])
-        except IndexError:
-            end_address = end[0]
-        kms += stats['totalDistanceInKm']
-        ls += stats['fuelConsumptionInL']
-        average_consumption = (stats['fuelConsumptionInL']/stats['totalDistanceInKm'])*100
-        trip_data_to_db(myt, fresh, average_consumption, stats)
+        start_time = pendulum.parse(trip['summary']['startTs']).in_tz(myt.config_data['timezone']).to_datetime_string()
+        end_time = pendulum.parse(trip['summary']['endTs']).in_tz(myt.config_data['timezone']).to_datetime_string()
+        start_address = f'{trip["summary"]["startLat"]} {trip["summary"]["startLon"]}'
+        end_address = f'{trip["summary"]["endLat"]} {trip["summary"]["endLon"]}'
+        length = trip['summary']['length']/1000
+        liters = trip['summary']['fuelConsumption']/1000
+        kms += length
+        ls += liters
+        average_consumption = (liters/length)*100
+        trip_data_to_db(myt, fresh, average_consumption, kms, liters)
         print('{} {} -> {} {}: {} km, {} km/h, {:.2f} l/100 km, {:.2f} l'.
-              format(start_time, start_address, end_time, end_address, stats['totalDistanceInKm'],
-                     stats['averageSpeedInKmph'], average_consumption, stats['fuelConsumptionInL']))
+              format(start_time, start_address, end_time, end_address, length,
+                     trip['summary']['averageSpeed'], average_consumption, liters))
+        print_trip_stats(trip)
+
     if fresh_data and myt.config_data['use_influxdb']:
         insert_into_influxdb('short_term_average_consumption', (ls/kms)*100)
     print('Total distance: {:.3f} km, Fuel consumption: {:.2f} l, {:.2f} l/100 km'.format(kms, ls, (ls/kms)*100))
