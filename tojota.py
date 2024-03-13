@@ -494,10 +494,13 @@ def main():
 
     log.info('Get parking info...')
     parking, fresh = myt.get_parking()
-    latitude = parking['payload']['vehicleLocation']['latitude']
-    longitude = parking['payload']['vehicleLocation']['longitude']
-    parking_date = pendulum.parse(parking['payload']['lastTimestamp']).in_tz(myt.config_data['timezone']).to_datetime_string()
-    print('Car was parked at {} {} at {}'.format(latitude, longitude, parking_date))
+    try:
+        latitude = parking['payload']['vehicleLocation']['latitude']
+        longitude = parking['payload']['vehicleLocation']['longitude']
+        parking_date = pendulum.parse(parking['payload']['lastTimestamp']).in_tz(myt.config_data['timezone']).to_datetime_string()
+        print('Car was parked at {} {} at {}'.format(latitude, longitude, parking_date))
+    except KeyError:
+        print('Failed to get parking data')
 
     # Get odometer and fuel tank status
     log.info('Get odometer info...')
