@@ -21,7 +21,9 @@ import os
 from pathlib import Path
 import platform
 import sys
+from urllib.parse import parse_qs, urlparse
 
+import jwt
 import pendulum
 import requests
 
@@ -29,12 +31,11 @@ logging.basicConfig(format='%(asctime)s:%(name)s:%(levelname)s: %(message)s')
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-# Fake app version mimicking the Android app
-APP_VERSION = '4.10.0'
-
 CACHE_DIR = 'cache'
 USER_DATA = 'user_data.json'
 INFLUXDB_URL = 'http://localhost:8086/write?db=tojota'
+
+MYT_API_URL = 'https://ctpa-oneapi.tceu-ctp-prd.toyotaconnectedeurope.io'
 
 
 class Myt:
@@ -43,15 +44,22 @@ class Myt:
     """
     def __init__(self):
         """
-        Create cache directory, try to load existing user data or if it doesn't exists do login.
+        Create cache directory, try to load existing user data or if it doesn't exist do login.
         """
         os.makedirs(CACHE_DIR, exist_ok=True)
         self.config_data = self._get_config()
         self.user_data = self._get_user_data()
-        if self.user_data:
-            self.headers = {'X-TME-TOKEN': self.user_data['token'], 'X-TME-LOCALE': 'fi-fi'}
-        else:
+        if not self.user_data or pendulum.now() > pendulum.parse(self.user_data['expiration']):
             self.login()
+
+        self.headers = {
+            'Authorization': f'Bearer {self.user_data["access_token"]}',
+            'x-api-key': 'tTZipv6liF74PwMfk9Ed68AQ0bISswwf3iHQdqcF',  # Found from the intternets
+            'x-guid': self.user_data['uuid'],
+            'guid': self.user_data['uuid'],
+            'vin': self.config_data['vin'],
+            "x-brand": "T",
+        }
 
     @staticmethod
     def _get_config(config_file='myt.json'):
@@ -83,7 +91,7 @@ class Myt:
                     raise
             return user_data
         except FileNotFoundError:
-            return None
+            return []
 
     @staticmethod
     def _read_file(file_path):
@@ -123,39 +131,104 @@ class Myt:
             return max(files, key=os.path.getctime)
         return None
 
-    def login(self, locale='fi-fi'):
+    def login(self):
         """
-        Do Toyota SSO login. Saves user data for configured account in self.user_data and sets token to self.headers.
+        Do Toyota SSO login. Saves user data for configured account in self.user_data
         User data is saved to CACHE_DIR for reuse.
-        :param locale: Locale for login is required but doesn't seem to have any effect
         :return: None
         """
-        login_headers = {'X-TME-BRAND': 'TOYOTA', 'X-TME-LC': locale, 'Accept': 'application/json, text/plain, */*',
-                         'Sec-Fetch-Dest': 'empty'}
-        log.info('Logging in...')
-        r = requests.post('https://ssoms.toyota-europe.com/authenticate', headers=login_headers, json=self.config_data)
-        if r.status_code != 200:
-            raise ValueError('Login failed, check your credentials! {}'.format(r.text))
-        user_data = r.json()
-        self.user_data = user_data
-        self.headers = {'X-TME-TOKEN': user_data['token']}
-        self._write_file(Path(CACHE_DIR) / USER_DATA, r.text)
+        login_url = 'https://b2c-login.toyota-europe.com/json/realms/root/realms/tme/authenticate?authIndexType=service&authIndexValue=oneapp'
+        authorize_url = 'https://b2c-login.toyota-europe.com/oauth2/realms/root/realms/tme/authorize?client_id=oneapp&scope=openid+profile+write&response_type=code&redirect_uri=com.toyota.oneapp:/oauth2Callback&code_challenge=plain&code_challenge_method=plain'
+        token_url = 'https://b2c-login.toyota-europe.com/oauth2/realms/root/realms/tme/access_token'
 
-    def get_trips(self, trip=1):
+        if "refresh_token" not in self.user_data:
+            login_headers = {'Content-Type': 'application/json'}
+            log.info('Get initial auth_id...')
+            r = requests.post(login_url, headers=login_headers)
+            log.info('Get username prompt...')
+            r = requests.post(login_url, headers=login_headers, data=r.text)
+            data = r.json()
+            data['callbacks'][0]['input'][0]['value'] = self.config_data['username']
+            log.info('Get password prompt...')
+            r = requests.post(login_url, headers=login_headers, data=json.dumps(data))
+            data = r.json()
+            try:
+                data['callbacks'][0]['input'][0]['value'] = self.config_data['password']
+            except KeyError:
+                raise ValueError('Login failed, check your username! {}'.format(data['callbacks'][0]['output'][0]['value']))
+            log.info('Get login token...')
+            r = requests.post(login_url, headers=login_headers, data=json.dumps(data))
+            if r.status_code != 200:
+                raise ValueError('Login failed, check your password! {}'.format(r.text))
+            data = r.json()
+
+            log.info('Authorizing...')
+            headers = {'cookie': f"iPlanetDirectoryPro={data['tokenId']}"}
+            r = requests.get(authorize_url, headers=headers, allow_redirects=False)
+            authentication_code = parse_qs(urlparse(r.headers['Location']).query)['code'][0]
+
+            log.info('Get access tokens...')
+            headers = {"authorization": "basic b25lYXBwOm9uZWFwcA=="}  # oneapp:oneapp
+            data = {
+                'client_id': 'oneapp',
+                'code': authentication_code,
+                'redirect_uri': 'com.toyota.oneapp:/oauth2Callback',
+                'grant_type': 'authorization_code',
+                'code_verifier': 'plain',
+            }
+            r = requests.post(token_url, headers=headers, data=data, allow_redirects=False)
+            if not r.ok:
+                raise ValueError('Getting authorization tokens failed! {}'.format(r.text))
+        else:
+            log.info('Using refresh token...')
+            headers = {"authorization": "basic b25lYXBwOm9uZWFwcA=="}  # oneapp:oneapp
+            data = {
+                'client_id': 'oneapp',
+                'refresh_token': self.user_data['refresh_token'],
+                'redirect_uri': 'com.toyota.oneapp:/oauth2Callback',
+                'grant_type': 'refresh_token',
+                'code_verifier': 'plain',
+            }
+            r = requests.post(token_url, headers=headers, data=data, allow_redirects=False)
+            if not r.ok:
+                raise ValueError('Getting authorization tokens using refresh token failed! {}'.format(r.text))
+
+        user_data = r.json()
+        user_data['uuid'] = jwt.decode(
+            user_data['id_token'],
+            algorithms=['RS256'],
+            options={'verify_signature': False},
+            audience='oneappsdkclient',
+        )['uuid']
+        user_data['expiration'] = str(pendulum.now().add(seconds=user_data['expires_in']))
+
+        self.user_data = user_data
+        self._write_file(Path(CACHE_DIR) / USER_DATA, json.dumps(user_data))
+
+    def get_trips(self, from_date=None, to_date=None, route=False, summary=True, limit=50, offset=0):
         """
         Get latest 10 trips. Save trips to CACHE_DIR/trips/trips-`datetime` file. Will save every time there is a new
         trip or daily because of changing metadata if no new trips. Saved information is not currently used for
         anything.
-        :param trip: There is paging, but it doesn't seem to do anything. 1 is the default value.
-        :return: recentTrips dict, fresh boolean True is new data was fetched
+        :param from_date: start date
+        :param to_date: end date
+        :param route: Get route location points
+        :param summary: Include summary data
+        :param limit: Limit trip count. Max 50 with routes, max 1000 without routes
+        :param offset: Pagination offset
+        :return: recentTrips dict, fresh boolean True if different data was fetched than previously
         """
         fresh = False
         trips_path = Path(CACHE_DIR) / 'trips'
         trips_file = trips_path / 'trips-{}'.format(pendulum.now())
         log.info('Fetching trips...')
+        if not to_date:
+            to_date = pendulum.now().to_date_string()
+        if not from_date:
+            from_date = pendulum.now().add(weeks=-1).to_date_string()
         r = requests.get(
-            'https://cpb2cs.toyota-europe.com/api/user/{}/cms/trips/v2/history/vin/{}/{}'.format(
-                self.user_data['customerProfile']['uuid'], self.config_data['vin'], trip), headers=self.headers)
+            f'{MYT_API_URL}/v1/trips?from={from_date}&to={to_date}&route={route}&summary={summary}&limit={limit}&offset={offset}',
+            headers=self.headers)
         if r.status_code != 200:
             raise ValueError('Failed to get data, Status: {} Headers: {} Body: {}'.format(r.status_code, r.headers,
                                                                                           r.text))
@@ -167,10 +240,11 @@ class Myt:
         trips = r.json()
         return trips, fresh
 
-    def get_trip(self, trip_id):
+    def get_trip(self, trips, trip_id):
         """
         Get trip info. Trip is identified by uuidv4. Save trip data to CACHE_DIR/trips/[12]/[34]/uuid file. If given
         trip already exists in CACHE_DIR just get it from there.
+        :param trips: trips data structure
         :param trip_id: tripId to fetch. uuid v4 that is received from get_trips().
         :return: trip dict, fresh boolean True is new data was fetched
         """
@@ -180,13 +254,15 @@ class Myt:
         trip_file = trip_path / trip_id
         if not trip_file.exists():
             log.debug('Fetching trip...')
-            r = requests.get('https://cpb2cs.toyota-europe.com/api/user/{}/cms/trips/v2/{}/events/vin/{}'.format(
-                self.user_data['customerProfile']['uuid'], trip_id, self.config_data['vin']), headers=self.headers)
-            if r.status_code != 200:
-                raise ValueError('Failed to get data {} {}'.format(r.status_code, r.headers))
+            for trip in trips:
+                if trip['id'] == trip_id:
+                    trip_data = trip
+                    break
+            else:
+                raise ValueError('Failed to find the trip!')
+
             os.makedirs(trip_path, exist_ok=True)
-            self._write_file(trip_file, r.text)
-            trip_data = r.json()
+            self._write_file(trip_file, json.dumps(trip_data))
             fresh = True
         else:
             with open(trip_file, encoding='utf-8') as f:
@@ -203,12 +279,8 @@ class Myt:
         fresh = False
         parking_path = Path(CACHE_DIR) / 'parking'
         parking_file = parking_path / 'parking-{}'.format(pendulum.now())
-        token = self.user_data['token']
-        uuid = self.user_data['customerProfile']['uuid']
-        vin = self.config_data['vin']
-        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'VIN': vin}
-        url = f'https://myt-agg.toyota-europe.com/cma/api/users/{uuid}/vehicle/location'
-        r = requests.get(url, headers=headers)
+        url = f'{MYT_API_URL}/v1/location'
+        r = requests.get(url, headers=self.headers)
         if r.status_code != 200:
             raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
         os.makedirs(parking_path, exist_ok=True)
@@ -218,21 +290,18 @@ class Myt:
             fresh = True
         return r.json(), fresh
 
-    def get_odometer_fuel(self):
+    def get_telemetry(self):
         """
-        Get mileage and fuel tank information. Data is saved when vehicle is powered off. Save data to
+        Get mileage and range information. Data is saved when vehicle is powered off. Save data to
         CACHE_DIR/odometer/odometer-`datetime` file.
-        :return: list(odometer, odometer_unit, fuel_percentage, fresh)
+        :return: dict(odometer, hv_percentage, hv_range, ev_percentage, timestamp, charging_status), fresh
         """
         fresh = False
         odometer_path = Path(CACHE_DIR) / 'odometer'
         odometer_file = odometer_path / 'odometer-{}'.format(pendulum.now())
-        token = self.user_data['token']
-        vin = self.config_data['vin']
-        uuid = self.user_data['customerProfile']['uuid']
-        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'X-TME-APP-VERSION': APP_VERSION, 'UUID': uuid}
-        url = f'https://myt-agg.toyota-europe.com/cma/api/vehicle/{vin}/addtionalInfo'  # (sic)
-        r = requests.get(url, headers=headers)
+        url = f'{MYT_API_URL}/v3/telemetry'
+        r = requests.get(url, headers=self.headers)
+
         if r.status_code != 200:
             raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
         os.makedirs(odometer_path, exist_ok=True)
@@ -240,17 +309,16 @@ class Myt:
         if r.text != previous_odometer:
             self._write_file(odometer_file, r.text)
             fresh = True
-        data = r.json()
-        odometer = 0
-        odometer_unit = ''
-        fuel = 0
-        for item in data:
-            if item['type'] == 'mileage':
-                odometer = item['value']
-                odometer_unit = item['unit']
-            if item['type'] == 'Fuel':
-                fuel = item['value']
-        return odometer, odometer_unit, fuel, fresh
+        data = r.json()['payload']
+        telemetry = {
+            'odometer': data['odometer']['value'],
+            'hv_percentage': data['fuelLevel'],
+            'hv_range': data['distanceToEmpty']['value'],
+            'ev_percentage': data['batteryLevel'],
+            'timestamp': data['timestamp'],
+            'charging_status': data['chargingStatus'],
+        }
+        return telemetry, fresh
 
     def get_remote_control_status(self):
         """
@@ -261,12 +329,8 @@ class Myt:
         fresh = False
         remote_control_path = Path(CACHE_DIR) / 'remote_control'
         remote_control_file = remote_control_path / 'remote_control-{}'.format(pendulum.now())
-        token = self.user_data['token']
-        uuid = self.user_data['customerProfile']['uuid']
-        vin = self.config_data['vin']
-        headers = {'Cookie': f'iPlanetDirectoryPro={token}', 'uuid': uuid, 'X-TME-LOCALE': 'fi-fi', 'X-TME-BRAND': 'TOYOTA'}
-        url = f'https://myt-agg.toyota-europe.com/cma/api/vehicles/{vin}/remoteControl/status'
-        r = requests.get(url, headers=headers)
+        url = f'{MYT_API_URL}/v1/global/remote/electric/status'
+        r = requests.get(url, headers=self.headers)
         if r.status_code != 200:
             raise ValueError('Failed to get data {} {} {}'.format(r.text, r.status_code, r.headers))
         data = r.json()
@@ -286,6 +350,8 @@ class Myt:
 
     def get_driving_statistics(self, date_from=None, interval='day', locale='fi-fi'):
         """
+        OBSOLETE!
+
         Get driving statistics information. Save data to
         CACHE_DIR/statistics/statistics-`datetime` file.
 
@@ -336,6 +402,7 @@ def insert_into_influxdb(measurement, value):
 
 
 def remote_control_to_db(myt, fresh, charge_info, hvac_info):
+    # OBSOLETE!
     if fresh and myt.config_data['use_influxdb']:
         log.debug('Saving remote control data to influxdb')
         insert_into_influxdb('charge_level', charge_info['ChargeRemainingAmount'])
@@ -353,6 +420,15 @@ def remote_control_to_db(myt, fresh, charge_info, hvac_info):
         insert_into_influxdb('temperature_level', hvac_info['Temperaturelevel'])
 
 
+def ev_data_to_db(myt, fresh, data):
+    if fresh and myt.config_data['use_influxdb']:
+        log.debug('Saving EV data to influxdb')
+        insert_into_influxdb('charge_level', data['batteryLevel'])
+        insert_into_influxdb('ev_range', data['evRangeWithAc']['value'])
+        insert_into_influxdb('hv_level', data['fuelLevel'])
+        insert_into_influxdb('hv_range', data['fuelRange']['value'])
+
+
 def odometer_to_db(myt, fresh, fuel_percent, odometer):
     if fresh and myt.config_data['use_influxdb']:
         log.debug('Saving odometer data to influxdb')
@@ -360,55 +436,80 @@ def odometer_to_db(myt, fresh, fuel_percent, odometer):
         insert_into_influxdb('fuel_level', fuel_percent)
 
 
-def trip_data_to_db(myt, fresh, average_consumption, stats):
+def trip_data_to_db(myt, fresh, average_consumption, kms, liters):
     if fresh and myt.config_data['use_influxdb']:
-        insert_into_influxdb('trip_kilometers', stats['totalDistanceInKm'])
-        insert_into_influxdb('trip_liters', stats['fuelConsumptionInL'])
+        insert_into_influxdb('trip_kilometers', kms)
+        insert_into_influxdb('trip_liters', liters)
         insert_into_influxdb('trip_average_consumption', average_consumption)
+
+
+def print_trip_stats(trip):
+    duration = trip['summary']['duration']
+    length = trip['summary']['length']
+
+    try:
+        ev_time = trip['hdc']['evTime'] / duration * 100
+    except KeyError:
+        ev_time = 0
+    try:
+        eco_time = trip['hdc']['ecoTime'] / duration * 100
+    except KeyError:
+        eco_time = 0
+    try:
+        power_time = trip['hdc']['powerTime'] / duration * 100
+    except KeyError:
+        power_time = 0
+    try:
+        charge_time = trip['hdc']['chargeTime'] / duration * 100
+    except KeyError:
+        charge_time = 0
+    try:
+        ev_dist = trip['hdc']['evDistance'] / length * 100
+    except KeyError:
+        ev_dist = 0
+    try:
+        eco_dist = trip['hdc']['ecoDist'] / length * 100
+    except KeyError:
+        eco_dist = 0
+    try:
+        power_dist = trip['hdc']['powerDist'] / length * 100
+    except KeyError:
+        power_dist = 0
+    try:
+        charge_dist = trip['hdc']['chargeDist'] / length * 100
+    except KeyError:
+        charge_dist = 0
+    print('Time stats:       EV: {:.0f}%\teco: {:.0f}%\tpower: {:.0f}%\tcharging: {:.0f}%'.
+          format(ev_time, eco_time, power_time, charge_time))
+    print('Distance stats:   EV: {:.0f}%\teco: {:.0f}%\tpower: {:.0f}%\tcharging: {:.0f}%'.
+          format(ev_dist, eco_dist, power_dist, charge_dist))
 
 
 def main():
     """
-    Get trips, get parking information, get trips information
+    Get parking information, get odometer information, get remote control information, get trips information
     :return:
     """
     myt = Myt()
 
-    # Try to fetch trips array with existing user_info. If it fails, do new login and try again.
-    try:
-        trips, fresh = myt.get_trips()
-    except ValueError:
-        log.info('Failed to use cached token, doing fresh login...')
-        myt.login()
-        trips, fresh = myt.get_trips()
-    try:
-        latest_address = trips['recentTrips'][0]['endAddress']
-    except (KeyError, IndexError):
-        latest_address = 'Unknown address'
-
-    # Check is vehicle is still parked or moving and print corresponding information. Parking timestamp is epoch
-    # timestamp with microseconds. Actual value seems to be at second precision level.
     log.info('Get parking info...')
+    parking, fresh = myt.get_parking()
     try:
-        parking, fresh = myt.get_parking()
-        if parking['tripStatus'] == '0':
-            print('Car is parked at {} at {}'.format(latest_address,
-                                                     pendulum.from_timestamp(int(parking['event']['timestamp']) / 1000).
-                                                     in_tz(myt.config_data['timezone']).to_datetime_string()))
-        else:
-            print('Car left from {} parked at {}'.format(latest_address,
-                                                         pendulum.from_timestamp(int(parking['event']['timestamp']) /
-                                                                                 1000).
-                                                         in_tz(myt.config_data['timezone']).to_datetime_string()))
-    except ValueError:
-        print('Didn\'t get parking information!')
+        latitude = parking['payload']['vehicleLocation']['latitude']
+        longitude = parking['payload']['vehicleLocation']['longitude']
+        parking_date = pendulum.parse(parking['payload']['lastTimestamp']).in_tz(myt.config_data['timezone']).to_datetime_string()
+        print('Car was parked at {} {} at {}'.format(latitude, longitude, parking_date))
+    except KeyError:
+        print('Failed to get parking data')
 
     # Get odometer and fuel tank status
     log.info('Get odometer info...')
     try:
-        odometer, odometer_unit, fuel_percent, fresh = myt.get_odometer_fuel()
-        print('Odometer {} {}, {}% fuel left'.format(odometer, odometer_unit, fuel_percent))
-        odometer_to_db(myt, fresh, fuel_percent, odometer)
+        telemetry, fresh = myt.get_telemetry()
+        print('Odometer {} km, {}% fuel left'.format(telemetry['odometer'], telemetry['hv_percentage']))
+        print('EV {}%, status: {} at {}'.format(telemetry['ev_percentage'], telemetry['charging_status'],
+                                                pendulum.parse(telemetry['timestamp']).in_tz(myt.config_data['timezone']).to_datetime_string()))
+        odometer_to_db(myt, fresh, telemetry['hv_percentage'], telemetry['odometer'])
     except ValueError:
         print('Didn\'t get odometer information!')
 
@@ -416,65 +517,50 @@ def main():
     if myt.config_data['use_remote_control']:
         log.info('Get remote control status...')
         status, fresh = myt.get_remote_control_status()
-        charge_info = status['VehicleInfo']['ChargeInfo']
-        hvac_info = status['VehicleInfo']['RemoteHvacInfo']
-        print('Battery level {}%, EV range {} km, HV range {} km, Inside temperature {}, Charging status {}, status reported at {}'.
-              format(charge_info['ChargeRemainingAmount'], charge_info['EvDistanceWithAirCoInKm'],
-                     charge_info['GasolineTravelableDistance'],
-                     hvac_info['InsideTemperature'], charge_info['ChargingStatus'],
-                     pendulum.parse(status['VehicleInfo']['AcquisitionDatetime']).
+
+        data = status['payload']
+        print('Battery level {}%, EV range {} km, Fuel level {}%, HV range {} km, Charging status {}, status reported at {}'.
+              format(data['batteryLevel'], data['evRangeWithAc']['value'],
+                     data['fuelLevel'], data['fuelRange']['value'],
+                     data['chargingStatus'],
+                     pendulum.parse(data['lastUpdateTimestamp']).
                      in_tz(myt.config_data['timezone']).to_datetime_string()
                      ))
-        if charge_info['ChargingStatus'] == 'charging' and charge_info['RemainingChargeTime'] != 65535:
-            acquisition_datetime = pendulum.parse(status['VehicleInfo']['AcquisitionDatetime'])
-            charging_end_time = acquisition_datetime.add(minutes=charge_info['RemainingChargeTime'])
+        if data['chargingStatus'] == 'charging' and data['remainingChargeTime'] != 65535:
+            acquisition_datetime = pendulum.parse(data['lastUpdateTimestamp'])
+            charging_end_time = acquisition_datetime.add(minutes=data['remainingChargeTime'])
             print('Charging will be completed at {}'.format(charging_end_time.in_tz(myt.config_data['timezone']).
                                                             to_datetime_string()))
-        if hvac_info['RemoteHvacMode']:
-            front = 'On' if hvac_info['FrontDefoggerStatus'] else 'Off'
-            rear = 'On' if hvac_info['RearDefoggerStatus'] else 'Off'
+        if data['chargingStatus'] == 'charging' and data['remainingChargeTime'] == 65535:
+            print('Pulling power from the plug but not really charging')
+        ev_data_to_db(myt, fresh, data)
+        # remote_control_to_db(myt, fresh, charge_info, hvac_info)
 
-            print('HVAC is on since {}. Remaining heating time {} minutes. Windscreen heating is {}, rear window heating is {}.'.format(
-                pendulum.parse(hvac_info['LatestAcStartTime']).in_tz(myt.config_data['timezone']).to_datetime_string(),
-                hvac_info['RemainingMinutes'], front, rear))
-
-        remote_control_to_db(myt, fresh, charge_info, hvac_info)
-
+    log.info('Get trips...')
+    trips, fresh = myt.get_trips()
     # Get detailed information about trips and calculate cumulative kilometers and fuel liters
     kms = 0
     ls = 0
     fresh_data = 0
-    for trip in trips['recentTrips']:
-        trip_data, fresh = myt.get_trip(trip['tripId'])
+    for trip in trips['payload']['trips']:
+        trip_data, fresh = myt.get_trip(trips['payload']['trips'], trip['id'])
         fresh_data += fresh
-        stats = trip_data['statistics']
         # Parse UTC datetime strings to local time
-        start_time = pendulum.parse(trip['startTimeGmt']).in_tz(myt.config_data['timezone']).to_datetime_string()
-        end_time = pendulum.parse(trip['endTimeGmt']).in_tz(myt.config_data['timezone']).to_datetime_string()
-        # Remove country part from address strings
-        try:
-            start = trip['startAddress'].split(',')
-        except KeyError:
-            start = ['Unknown', ' Unknown']
-        try:
-            end = trip['endAddress'].split(',')
-        except KeyError:
-            end = ['Unknown', ' Unknown']
-        try:
-            start_address = '{},{}'.format(start[0], start[1])
-        except IndexError:
-            start_address = start[0]
-        try:
-            end_address = '{},{}'.format(end[0], end[1])
-        except IndexError:
-            end_address = end[0]
-        kms += stats['totalDistanceInKm']
-        ls += stats['fuelConsumptionInL']
-        average_consumption = (stats['fuelConsumptionInL']/stats['totalDistanceInKm'])*100
-        trip_data_to_db(myt, fresh, average_consumption, stats)
+        start_time = pendulum.parse(trip['summary']['startTs']).in_tz(myt.config_data['timezone']).to_datetime_string()
+        end_time = pendulum.parse(trip['summary']['endTs']).in_tz(myt.config_data['timezone']).to_datetime_string()
+        start_address = f'{trip["summary"]["startLat"]} {trip["summary"]["startLon"]}'
+        end_address = f'{trip["summary"]["endLat"]} {trip["summary"]["endLon"]}'
+        length = trip['summary']['length']/1000
+        liters = trip['summary']['fuelConsumption']/1000
+        kms += length
+        ls += liters
+        average_consumption = (liters/length)*100
+        trip_data_to_db(myt, fresh, average_consumption, kms, liters)
         print('{} {} -> {} {}: {} km, {} km/h, {:.2f} l/100 km, {:.2f} l'.
-              format(start_time, start_address, end_time, end_address, stats['totalDistanceInKm'],
-                     stats['averageSpeedInKmph'], average_consumption, stats['fuelConsumptionInL']))
+              format(start_time, start_address, end_time, end_address, length,
+                     trip['summary']['averageSpeed'], average_consumption, liters))
+        print_trip_stats(trip)
+
     if fresh_data and myt.config_data['use_influxdb']:
         insert_into_influxdb('short_term_average_consumption', (ls/kms)*100)
     print('Total distance: {:.3f} km, Fuel consumption: {:.2f} l, {:.2f} l/100 km'.format(kms, ls, (ls/kms)*100))

@@ -1,5 +1,19 @@
 # Changelog
 
+##  [0.1.0] - 2024-03-04
+
+- Breaking changes
+
+### Added
+
+- Use new MyT API
+
+### Known issues
+
+- Delete old cache/user_data.json if exists to get login working
+- get_trips only gets coordinates, not street addresses
+- No access to charging details or HVAC details
+
 ## [0.0.9] - 2022-07-04
 
 ### Fixed
